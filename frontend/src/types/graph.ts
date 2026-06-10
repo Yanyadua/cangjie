@@ -1,0 +1,148 @@
+export type NodeType =
+  | 'article'
+  | 'concept'
+  | 'claim'
+  | 'topic'
+  | 'person'
+  | 'organization'
+  | 'paper'
+  | 'project'
+  | 'framework'
+  | 'tool'
+  | 'method'
+  | 'technology'
+  | 'question'
+  | 'chunk';
+
+export type RelationType =
+  | 'related_to'
+  | 'contains'
+  | 'part_of'
+  | 'supports'
+  | 'contradicts'
+  | 'depends_on'
+  | 'implements'
+  | 'improves'
+  | 'causes'
+  | 'compares_with'
+  | 'derived_from'
+  | 'used_for'
+  | 'evidence_for'
+  | 'mentions'
+  | 'similar_to'
+  | 'belongs_to';
+
+export type GraphNode = {
+  id: string;
+  nodeType: NodeType;
+  name: string;
+  description?: string;
+  x?: number;
+  y?: number;
+  isDraft?: boolean;
+};
+
+export type GraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  relationType: RelationType;
+  confidence?: number;
+  evidence?: string;
+};
+
+export type GraphData = {
+  summary?: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+};
+
+export type DocumentResponse = {
+  id: string;
+  title: string;
+  source_type?: string;
+  status: string;
+  created_at: string;
+};
+
+export type DraftGraphResponse = {
+  id: string;
+  document_id: string;
+  graph_json: GraphData;
+  status: string;
+};
+
+export type InsertionProposalJSON = {
+  candidate_positions: Array<{
+    target_node_id: string;
+    target_node_name: string;
+    reason: string;
+    score: number;
+  }>;
+  suggested_merges: Array<{
+    draft_node_temp_id: string;
+    existing_node_id: string;
+    reason: string;
+    confidence: number;
+  }>;
+  suggested_edges: Array<{
+    source: string;
+    target: string;
+    relation_type: RelationType;
+    reason: string;
+    confidence: number;
+  }>;
+  possible_conflicts: Array<Record<string, unknown>>;
+};
+
+export type InsertionProposalResponse = {
+  id: string;
+  document_id: string;
+  proposal_json: InsertionProposalJSON;
+  status: string;
+};
+
+export type SearchResult = {
+  chunks: Array<{
+    id: string;
+    document_id: string;
+    content: string;
+    score: number;
+  }>;
+  nodes: Array<{
+    id: string;
+    node_type: string;
+    name: string;
+    description?: string;
+    score: number;
+  }>;
+  documents: Array<DocumentResponse>;
+};
+
+export const NODE_COLORS: Record<string, string> = {
+  article: '#3b82f6',
+  concept: '#10b981',
+  claim: '#f97316',
+  topic: '#8b5cf6',
+  person: '#ef4444',
+  organization: '#6366f1',
+  paper: '#0ea5e9',
+  project: '#14b8a6',
+  framework: '#f59e0b',
+  tool: '#ec4899',
+  method: '#64748b',
+  technology: '#22c55e',
+  question: '#a855f7',
+  chunk: '#94a3b8',
+};
+
+export const NODE_TYPES: NodeType[] = [
+  'article', 'concept', 'claim', 'topic', 'person', 'organization',
+  'paper', 'project', 'framework', 'tool', 'method', 'technology', 'question',
+];
+
+export const RELATION_TYPES: RelationType[] = [
+  'related_to', 'contains', 'part_of', 'supports', 'contradicts',
+  'depends_on', 'implements', 'improves', 'causes', 'compares_with',
+  'derived_from', 'used_for', 'evidence_for', 'mentions', 'similar_to', 'belongs_to',
+];
