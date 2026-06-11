@@ -350,58 +350,11 @@ class GraphExtractor:
     async def _extract_multistage(self, title: str, content: str) -> dict:
         """4-stage extraction pipeline."""
 
-        article_prompt = f"文章标题：{title}\n\n文章内容：\n{content}"
-
-        # ── Stage 1: Summary + core concepts ──
-        logger.info("Stage 1/4: Extracting summary and core concepts")
-        stage1_raw = await self._llm.generate_json(
-            system_prompt=_STAGE1_SYSTEM,
-            user_prompt=article_prompt,
-        )
-        stage1 = _parse_json_response(stage1_raw)
-        if not stage1:
-            raise ValueError("Stage 1 returned invalid response")
-
-        summary = stage1.get("summary", "")
-        core_concepts = stage1.get("core_concepts", [])
-
-        logger.info("Stage 1 complete: summary=%s, concepts=%d", summary[:50], len(core_concepts))
-
-        # ── Stage 2: Entity & claim extraction ──
-        logger.info("Stage 2/4: Extracting entities and claims")
-        stage2_prompt = (
-            f"文章标题：{title}\n\n文章内容：\n{content}\n\n"
-            f"阶段1已识别的核心概念：\n{json.dumps(core_concepts, ensure_ascii=False, indent=2)}\n\n"
-            "请基于以上概念，输出完整的节点列表（包含 article 节点、概念节点、实体节点和观点节点）。"
-        )
-        stage2_raw = await self._llm.generate_json(
-            system_prompt=_STAGE2_SYSTEM,
-            user_prompt=stage2_prompt,
-        )
-        stage2 = _parse_json_response(stage2_raw)
-        if not stage2 or not stage2.get("nodes"):
-            raise ValueError("Stage 2 returned no nodes")
-
-        nodes = stage2["nodes"]
-        logger.info("Stage 2 complete: %d nodes", len(nodes))
-
-        # ── Stage 3: Relationship extraction ──
-        logger.info("Stage 3/4: Extracting relationships")
-        stage3_prompt = (
-            f"文章内容：\n{content}\n\n"
-            f"已识别的节点：\n{json.dumps(nodes, ensure_ascii=False, indent=2)}\n\n"
-            "请基于文章内容，抽取这些节点之间的关系。"
-        )
-        stage3_raw = await self._llm.generate_json(
-            system_prompt=_STAGE3_SYSTEM,
-            user_prompt=stage3_prompt,
-        )
-        stage3 = _parse_json_response(stage3_raw)
-        if not stage3:
-            raise ValueError("Stage 3 returned invalid response")
+        stage1 = await self.run_stage1(title, content)
+        stage2 = await self.run_stage2(title, content, stage1)
+        stage3 = await self.run_stage3(content, stage2)
 
         edges = stage3.get("edges", [])
-        logger.info("Stage 3 complete: %d edges", len(edges))
 
         # ── Stage 4: Evidence cross-validation ──
         logger.info("Stage 4/4: Cross-validating evidence")
@@ -413,6 +366,64 @@ class GraphExtractor:
         result = _validate_and_sanitize({"summary": summary, "nodes": nodes, "edges": edges})
         logger.info("Extraction complete: %d nodes, %d edges", len(result["nodes"]), len(result["edges"]))
         return result
+
+    # ── Individual stage methods (callable independently) ──
+
+    async def run_stage1(self, title: str, content: str) -> dict:
+        """Stage 1: Extract summary and core concepts."""
+        logger.info("Stage 1: Extracting summary and core concepts")
+        article_prompt = f"文章标题：{title}\n\n文章内容：\n{content}"
+
+        raw = await self._llm.generate_json(system_prompt=_STAGE1_SYSTEM, user_prompt=article_prompt)
+        stage1 = _parse_json_response(raw)
+        if not stage1:
+            raise ValueError("Stage 1 returned invalid response")
+
+        stage1.setdefault("summary", "")
+        stage1.setdefault("core_concepts", [])
+        logger.info("Stage 1 complete: %d concepts", len(stage1["core_concepts"]))
+        return stage1
+
+    async def run_stage2(self, title: str, content: str, stage1_data: dict) -> dict:
+        """Stage 2: Extract entity and claim nodes based on stage 1 concepts."""
+        logger.info("Stage 2: Extracting entities and claims")
+        core_concepts = stage1_data.get("core_concepts", [])
+
+        stage2_prompt = (
+            f"文章标题：{title}\n\n文章内容：\n{content}\n\n"
+            f"阶段1已识别的核心概念：\n{json.dumps(core_concepts, ensure_ascii=False, indent=2)}\n\n"
+            "请基于以上概念，输出完整的节点列表（包含 article 节点、概念节点、实体节点和观点节点）。"
+        )
+        raw = await self._llm.generate_json(system_prompt=_STAGE2_SYSTEM, user_prompt=stage2_prompt)
+        stage2 = _parse_json_response(raw)
+        if not stage2 or not stage2.get("nodes"):
+            raise ValueError("Stage 2 returned no nodes")
+
+        logger.info("Stage 2 complete: %d nodes", len(stage2["nodes"]))
+        return stage2
+
+    async def run_stage3(self, content: str, stage2_data: dict) -> dict:
+        """Stage 3: Extract relationships based on stage 2 nodes."""
+        logger.info("Stage 3: Extracting relationships")
+        nodes = stage2_data.get("nodes", [])
+
+        stage3_prompt = (
+            f"文章内容：\n{content}\n\n"
+            f"已识别的节点：\n{json.dumps(nodes, ensure_ascii=False, indent=2)}\n\n"
+            "请基于文章内容，抽取这些节点之间的关系。"
+        )
+        raw = await self._llm.generate_json(system_prompt=_STAGE3_SYSTEM, user_prompt=stage3_prompt)
+        stage3 = _parse_json_response(raw)
+        if not stage3:
+            raise ValueError("Stage 3 returned invalid response")
+
+        stage3.setdefault("edges", [])
+        logger.info("Stage 3 complete: %d edges", len(stage3["edges"]))
+        return stage3
+
+    async def validate_evidence(self, edges: list[dict], source_text: str) -> None:
+        """Public wrapper for evidence validation."""
+        await self._validate_evidence(edges, source_text)
 
     async def _validate_evidence(self, edges: list[dict], source_text: str) -> None:
         """Cross-validate evidence against source text via LLM."""

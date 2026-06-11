@@ -39,6 +39,8 @@ export default function ImportPage() {
         author: author || undefined,
         content,
       });
+      // Navigate to extraction wizard
+      navigate(`/extract/${result.document_id}`);
 
       // Fetch the generated draft graph to show preview
       const dg = await getDraftGraph(result.draft_graph_id);

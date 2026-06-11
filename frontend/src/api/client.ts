@@ -81,6 +81,48 @@ export async function getNodeDetail(nodeId: string) {
   return res.data;
 }
 
+// ── Extraction Stages ──
+
+export async function getExtractionStatus(documentId: string) {
+  const res = await api.get(`/extraction/${documentId}/status`);
+  return res.data;
+}
+
+export async function runStage1(documentId: string) {
+  const res = await api.post(`/extraction/${documentId}/stage1`);
+  return res.data;
+}
+
+export async function saveStage1(documentId: string, data: unknown) {
+  const res = await api.put(`/extraction/${documentId}/stage1`, data);
+  return res.data;
+}
+
+export async function runStage2(documentId: string) {
+  const res = await api.post(`/extraction/${documentId}/stage2`);
+  return res.data;
+}
+
+export async function saveStage2(documentId: string, data: unknown) {
+  const res = await api.put(`/extraction/${documentId}/stage2`, data);
+  return res.data;
+}
+
+export async function runStage3(documentId: string) {
+  const res = await api.post(`/extraction/${documentId}/stage3`);
+  return res.data;
+}
+
+export async function saveStage3(documentId: string, data: unknown) {
+  const res = await api.put(`/extraction/${documentId}/stage3`, data);
+  return res.data;
+}
+
+export async function finalizeExtraction(documentId: string) {
+  const res = await api.post(`/extraction/${documentId}/finalize`);
+  return res.data;
+}
+
 // ── Search ──
 
 export async function semanticSearch(query: string, topK = 10): Promise<SearchResult> {

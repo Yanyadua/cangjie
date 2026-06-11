@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import documents, draft_graphs, insertion, graph, search, qa
+from .api import documents, draft_graphs, insertion, graph, search, qa, extraction
 
 app = FastAPI(
     title="Personal Knowledge Base",
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(documents.router, prefix="/api", tags=["documents"])
 app.include_router(draft_graphs.router, prefix="/api", tags=["draft-graphs"])
+app.include_router(extraction.router, prefix="/api", tags=["extraction"])
 app.include_router(insertion.router, prefix="/api", tags=["insertion"])
 app.include_router(graph.router, prefix="/api", tags=["graph"])
 app.include_router(search.router, prefix="/api", tags=["search"])

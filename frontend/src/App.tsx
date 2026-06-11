@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import ImportPage from './pages/ImportPage';
+import ExtractionWizardPage from './pages/ExtractionWizardPage';
 import HistoryPage from './pages/HistoryPage';
 import DraftGraphPage from './pages/DraftGraphPage';
 import InsertionProposalPage from './pages/InsertionProposalPage';
@@ -57,6 +58,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<ImportPage />} />
             <Route path="/import" element={<ImportPage />} />
+            <Route path="/extract/:documentId" element={<ExtractionWizardPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/draft/:id" element={<DraftGraphPage />} />
             <Route path="/proposal/:id" element={<InsertionProposalPage />} />

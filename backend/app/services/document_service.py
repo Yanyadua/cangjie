@@ -71,42 +71,13 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Chunk embedding failed: {e}")
 
-        # Generate draft local graph via LLM
-        try:
-            extractor = GraphExtractor(self.llm)
-            draft_graph_data = await extractor.extract(data.title, cleaned)
-        except Exception as e:
-            import traceback
-            logger.error(f"Graph extraction failed: {e}\n{traceback.format_exc()}")
-            draft_graph_data = {"summary": "", "nodes": [], "edges": []}
-
-        # Generate article-level embedding
-        article_emb_text = f"{data.title}\n{draft_graph_data.get('summary', '')}"
-        try:
-            article_emb = await self.embedding.embed(article_emb_text)
-        except Exception as e:
-            logger.warning(f"Article embedding failed: {e}")
-            article_emb = []
-
-        # Save draft graph
-        draft_graph = DraftGraph(
-            id=uuid4(),
-            document_id=doc.id,
-            graph_json=draft_graph_data,
-            status="draft",
-        )
-        self.db.add(draft_graph)
-
-        # Update document status
-        doc.summary = draft_graph_data.get("summary", "")
-        doc.status = "processed"
+        # Mark as ready for extraction (graph extraction is now done via extraction wizard)
+        doc.status = "ready"
 
         await self.db.flush()
 
         return {
             "document_id": str(doc.id),
-            "draft_graph_id": str(draft_graph.id),
-            "summary": draft_graph_data.get("summary", ""),
         }
 
     async def get_documents(self, skip: int = 0, limit: int = 20) -> dict:
