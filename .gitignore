@@ -1,27 +1,43 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 *.egg-info/
+.eggs/
 dist/
 build/
-
-# Environment
+*.egg
+.venv/
+venv/
+env/
 .env
-*.env.local
+*.pem
 
 # Node
 node_modules/
 frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Docker
-docker-compose.override.yml
+# Logs
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite3
+
+# Claude Code
+.claude/

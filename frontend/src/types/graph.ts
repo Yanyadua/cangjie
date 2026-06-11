@@ -15,6 +15,7 @@ export type NodeType =
   | 'chunk';
 
 export type RelationType =
+  | 'tag'
   | 'related_to'
   | 'contains'
   | 'part_of'
@@ -102,6 +103,45 @@ export type InsertionProposalResponse = {
   status: string;
 };
 
+// ── Clustering Proposal ──
+
+export type TagAction = {
+  tag_name: string;
+  action: 'MERGE' | 'NEW';
+  target_topic_id?: string;
+  confidence: number;
+  reason: string;
+  matched_candidates: Array<{
+    id: string;
+    name: string;
+    similarity: number;
+  }>;
+  proposed_description?: string;
+  temp_id?: string;
+};
+
+export type TopicEdgeProposal = {
+  source_tag: string;
+  target_tag: string;
+  relation_type: string;
+  reason: string;
+};
+
+export type ClusteringProposalJSON = {
+  article_title: string;
+  article_summary: string;
+  document_id: string;
+  tag_actions: TagAction[];
+  topic_edges: TopicEdgeProposal[];
+};
+
+export type ClusteringProposalResponse = {
+  id: string;
+  document_id: string;
+  proposal_json: ClusteringProposalJSON;
+  status: string;
+};
+
 export type SearchResult = {
   chunks: Array<{
     id: string;
@@ -142,7 +182,7 @@ export const NODE_TYPES: NodeType[] = [
 ];
 
 export const RELATION_TYPES: RelationType[] = [
-  'related_to', 'contains', 'part_of', 'supports', 'contradicts',
+  'tag', 'related_to', 'contains', 'part_of', 'supports', 'contradicts',
   'depends_on', 'implements', 'improves', 'causes', 'compares_with',
   'derived_from', 'used_for', 'evidence_for', 'mentions', 'similar_to', 'belongs_to',
 ];

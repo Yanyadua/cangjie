@@ -131,6 +131,45 @@ class InsertionProposalUpdateRequest(BaseModel):
     proposal_json: InsertionProposalJSON
 
 
+# ── Clustering Proposal ──
+
+class TagAction(BaseModel):
+    tag_name: str
+    action: str  # "MERGE" or "NEW"
+    target_topic_id: Optional[str] = None
+    confidence: float = 0.5
+    reason: str = ""
+    matched_candidates: list[dict[str, Any]] = []
+    proposed_description: Optional[str] = None
+    temp_id: Optional[str] = None
+
+
+class TopicEdgeProposal(BaseModel):
+    source_tag: str
+    target_tag: str
+    relation_type: str = "related_to"
+    reason: str = ""
+
+
+class ClusteringProposalJSON(BaseModel):
+    article_title: str
+    article_summary: str
+    document_id: str
+    tag_actions: list[TagAction] = []
+    topic_edges: list[TopicEdgeProposal] = []
+
+
+class ClusteringProposalResponse(BaseModel):
+    id: UUID
+    document_id: UUID
+    proposal_json: ClusteringProposalJSON
+    status: str
+
+
+class ClusteringProposalUpdateRequest(BaseModel):
+    proposal_json: ClusteringProposalJSON
+
+
 # ── Node / Edge detail ──
 
 class NodeResponse(BaseModel):

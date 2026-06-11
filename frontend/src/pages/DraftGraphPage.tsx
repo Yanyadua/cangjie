@@ -111,7 +111,7 @@ export default function DraftGraphPage() {
       await updateDraftGraph(id, toSave as GraphData);
       const result = await confirmDraftGraph(id);
       if (result.proposal_id) {
-        navigate(`/proposal/${result.proposal_id}`);
+        navigate(`/clustering/${result.proposal_id}`);
       } else {
         alert('图谱已确认，但生成插入建议失败: ' + (result.error || '未知错误'));
       }

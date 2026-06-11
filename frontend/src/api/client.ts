@@ -7,7 +7,7 @@ import type {
   AskRequest,
   AskResponse,
 } from '../types/api';
-import type { GraphData, DraftGraphResponse, InsertionProposalResponse, SearchResult } from '../types/graph';
+import type { GraphData, DraftGraphResponse, InsertionProposalResponse, SearchResult, ClusteringProposalJSON, ClusteringProposalResponse } from '../types/graph';
 
 const api = axios.create({
   baseURL: '/api',
@@ -66,6 +66,33 @@ export async function updateInsertionProposal(proposalId: string, proposalJson: 
 
 export async function applyInsertionProposal(proposalId: string): Promise<ApplyResponse> {
   const res = await api.post<ApplyResponse>(`/insertion-proposals/${proposalId}/apply`);
+  return res.data;
+}
+
+// ── Clustering Proposals ──
+
+export async function getClusteringProposal(proposalId: string): Promise<ClusteringProposalResponse> {
+  const res = await api.get<ClusteringProposalResponse>(`/clustering-proposals/${proposalId}`);
+  return res.data;
+}
+
+export async function updateClusteringProposal(
+  proposalId: string,
+  proposalJson: ClusteringProposalJSON,
+): Promise<ClusteringProposalResponse> {
+  const res = await api.put<ClusteringProposalResponse>(`/clustering-proposals/${proposalId}`, proposalJson);
+  return res.data;
+}
+
+export async function applyClusteringProposal(proposalId: string): Promise<ApplyResponse> {
+  const res = await api.post<ApplyResponse>(`/clustering-proposals/${proposalId}/apply`);
+  return res.data;
+}
+
+// ── Global Graph ──
+
+export async function getGlobalGraph(filterType: 'all' | 'topic' | 'article' = 'all') {
+  const res = await api.get('/graph/global', { params: { filter_type: filterType } });
   return res.data;
 }
 

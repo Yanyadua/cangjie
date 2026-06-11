@@ -134,7 +134,7 @@ export default function ExtractionWizardPage() {
   const nodeNameMap = Object.fromEntries(nodes.map(n => [n.temp_id, n.name]));
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24, height: 'calc(100vh - 56px)', overflowY: 'auto' }}>
       {/* Progress bar */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24 }}>
         {STEP_LABELS.map((label, i) => (

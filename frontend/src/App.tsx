@@ -8,6 +8,7 @@ import InsertionProposalPage from './pages/InsertionProposalPage';
 import GlobalGraphPage from './pages/GlobalGraphPage';
 import SearchPage from './pages/SearchPage';
 import AskPage from './pages/AskPage';
+import ClusteringProposalPage from './pages/ClusteringProposalPage';
 
 const navItems = [
   { to: '/import', label: '导入' },
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/draft/:id" element={<DraftGraphPage />} />
             <Route path="/proposal/:id" element={<InsertionProposalPage />} />
+            <Route path="/clustering/:id" element={<ClusteringProposalPage />} />
             <Route path="/graph" element={<GlobalGraphPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/ask" element={<AskPage />} />
