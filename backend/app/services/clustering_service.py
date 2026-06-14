@@ -12,7 +12,6 @@ from sqlalchemy.orm.attributes import flag_modified
 from ..models.db_models import InsertionProposal, Document
 from ..core.llm_client import LLMClient
 from ..core.embedding_client import EmbeddingClient
-from ..core.tag_generator import TagGenerator
 from ..core.clustering_planner import ClusteringPlanner
 from ..core.vector_store import VectorStore
 from ..core.graph_store import GraphStore
@@ -27,7 +26,6 @@ class ClusteringService:
         self.db = db
         self.llm = LLMClient()
         self.embedding = EmbeddingClient()
-        self.tag_generator = TagGenerator(self.llm)
         self.vector_store = VectorStore(db)
         self.graph_store = GraphStore(db)
         self.planner = ClusteringPlanner(
@@ -43,13 +41,22 @@ class ClusteringService:
             return {"error": "Document not found"}
 
         title = doc.title
-        stage1 = draft_graph_json.get("stage1", {})
-        summary = stage1.get("summary", doc.summary or "")
-        core_concepts = stage1.get("core_concepts", [])
+        summary = draft_graph_json.get("summary", doc.summary or "")
 
-        tags = await self.tag_generator.generate_tags(summary, core_concepts)
+        # Reuse topic_tags from extraction skeleton (no separate LLM call)
+        tags = [
+            {"name": t["name"], "confidence": t.get("confidence", 0.8)}
+            for t in draft_graph_json.get("topic_tags", [])
+        ]
+
         if not tags:
-            return {"error": "Failed to generate tags"}
+            # Fallback: extract topic-type nodes from the graph as tags
+            for node in draft_graph_json.get("nodes", []):
+                if node.get("node_type") == "topic":
+                    tags.append({"name": node["name"], "confidence": 0.8})
+
+        if not tags:
+            return {"error": "No topic tags found. Complete extraction first."}
 
         proposal = await self.planner.generate_proposal(
             article_title=title,
