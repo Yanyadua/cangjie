@@ -58,6 +58,39 @@ export type GraphData = {
   edges: GraphEdge[];
 };
 
+export type TopicTag = {
+  name: string;
+  confidence?: number;
+};
+
+export type CoreClaim = {
+  name: string;
+  description: string;
+};
+
+export type SkeletonData = {
+  summary: string;
+  topic_tags: TopicTag[];
+  core_claims: CoreClaim[];
+};
+
+export type ExpandedData = {
+  nodes: Array<{
+    temp_id: string;
+    node_type: NodeType;
+    name: string;
+    description: string;
+  }>;
+  edges: Array<{
+    temp_id: string;
+    source: string;
+    target: string;
+    relation_type: RelationType;
+    confidence: number;
+    evidence: string;
+  }>;
+};
+
 export type DocumentResponse = {
   id: string;
   title: string;
