@@ -13,55 +13,37 @@ async def get_extraction_status(document_id: str, db: AsyncSession = Depends(get
     return await svc.get_status(document_id)
 
 
-@router.post("/extraction/{document_id}/stage1")
-async def run_stage1(document_id: str, db: AsyncSession = Depends(get_db)):
+@router.post("/extraction/{document_id}/step1")
+async def run_step1(document_id: str, db: AsyncSession = Depends(get_db)):
     svc = ExtractionService(db)
-    result = await svc.run_stage1(document_id)
+    result = await svc.run_step1(document_id)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
 
-@router.put("/extraction/{document_id}/stage1")
-async def save_stage1(document_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+@router.put("/extraction/{document_id}/step1")
+async def save_step1(document_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     svc = ExtractionService(db)
-    result = await svc.save_stage1(document_id, data)
+    result = await svc.save_step1(document_id, data)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
 
-@router.post("/extraction/{document_id}/stage2")
-async def run_stage2(document_id: str, db: AsyncSession = Depends(get_db)):
+@router.post("/extraction/{document_id}/step2")
+async def run_step2(document_id: str, db: AsyncSession = Depends(get_db)):
     svc = ExtractionService(db)
-    result = await svc.run_stage2(document_id)
+    result = await svc.run_step2(document_id)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
 
-@router.put("/extraction/{document_id}/stage2")
-async def save_stage2(document_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+@router.put("/extraction/{document_id}/step2")
+async def save_step2(document_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     svc = ExtractionService(db)
-    result = await svc.save_stage2(document_id, data)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return result
-
-
-@router.post("/extraction/{document_id}/stage3")
-async def run_stage3(document_id: str, db: AsyncSession = Depends(get_db)):
-    svc = ExtractionService(db)
-    result = await svc.run_stage3(document_id)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return result
-
-
-@router.put("/extraction/{document_id}/stage3")
-async def save_stage3(document_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    svc = ExtractionService(db)
-    result = await svc.save_stage3(document_id, data)
+    result = await svc.save_step2(document_id, data)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
