@@ -105,6 +105,116 @@ _RELATION_GUIDANCE = """
 - related_to: 以上均不适用时的兜底类型
 """
 
+# ── Progressive extraction prompts (2-step) ──
+
+_FEWSHOT_SKELETON_OUTPUT = json.dumps({
+    "summary": "本文介绍了微软研究院提出的 GraphRAG 方法，通过知识图谱和社区检测改进传统 RAG 的全局推理能力。",
+    "topic_tags": [
+        {"name": "检索增强生成", "confidence": 0.95},
+        {"name": "知识图谱", "confidence": 0.9},
+        {"name": "社区检测", "confidence": 0.85},
+        {"name": "RAG", "confidence": 0.8},
+        {"name": "知识管理", "confidence": 0.6}
+    ],
+    "core_claims": [
+        {
+            "name": "GraphRAG 在全局理解任务上优于传统 RAG",
+            "description": "实验表明 GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"
+        },
+        {
+            "name": "社区检测是 GraphRAG 的关键步骤",
+            "description": "GraphRAG 利用 Leiden 算法将知识图谱划分为局部子图并生成社区摘要"
+        },
+        {
+            "name": "传统 RAG 在跨文档推理时表现不佳",
+            "description": "传统 RAG 通过向量相似度检索文档片段，但在需要跨文档推理或全局理解时存在局限"
+        }
+    ]
+}, ensure_ascii=False, indent=2)
+
+_FEWSHOT_EXPAND_OUTPUT = json.dumps({
+    "nodes": [
+        {"temp_id": "n1", "node_type": "article", "name": "GraphRAG：基于知识图谱的检索增强生成", "description": "文章整体节点"},
+        {"temp_id": "n2", "node_type": "topic", "name": "检索增强生成", "description": "文章核心主题，涉及利用外部知识增强生成的方法"},
+        {"temp_id": "n3", "node_type": "topic", "name": "知识图谱", "description": "文章核心主题，GraphRAG 的基础数据结构"},
+        {"temp_id": "n4", "node_type": "topic", "name": "社区检测", "description": "文章涉及的关键技术主题"},
+        {"temp_id": "n5", "node_type": "claim", "name": "GraphRAG 在全局理解任务上优于传统 RAG", "description": "实验表明 GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "n6", "node_type": "claim", "name": "社区检测是 GraphRAG 的关键步骤", "description": "GraphRAG 利用 Leiden 算法将知识图谱划分为局部子图并生成社区摘要"},
+        {"temp_id": "n7", "node_type": "claim", "name": "传统 RAG 在跨文档推理时表现不佳", "description": "传统 RAG 通过向量相似度检索文档片段，但在需要跨文档推理或全局理解时存在局限"},
+        {"temp_id": "n8", "node_type": "method", "name": "GraphRAG", "description": "微软研究院提出的基于知识图谱的检索增强生成方法"},
+        {"temp_id": "n9", "node_type": "concept", "name": "传统 RAG", "description": "基于向量相似度的检索增强生成方法，GraphRAG 的改进对象"},
+        {"temp_id": "n10", "node_type": "method", "name": "Leiden 算法", "description": "GraphRAG 中使用的社区检测算法"},
+        {"temp_id": "n11", "node_type": "organization", "name": "微软研究院", "description": "提出 GraphRAG 的研究机构"}
+    ],
+    "edges": [
+        {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "tag", "confidence": 0.95, "evidence": "文章围绕检索增强生成展开讨论"},
+        {"temp_id": "e2", "source": "n1", "target": "n3", "relation_type": "tag", "confidence": 0.9, "evidence": "知识图谱是文章的核心主题"},
+        {"temp_id": "e3", "source": "n1", "target": "n4", "relation_type": "tag", "confidence": 0.85, "evidence": "社区检测是文章涉及的关键技术"},
+        {"temp_id": "e4", "source": "n1", "target": "n5", "relation_type": "contains", "confidence": 1.0, "evidence": "文章提出了 GraphRAG 在全局理解任务上优于传统 RAG 的观点"},
+        {"temp_id": "e5", "source": "n1", "target": "n6", "relation_type": "contains", "confidence": 1.0, "evidence": "文章指出社区检测是 GraphRAG 的关键步骤"},
+        {"temp_id": "e6", "source": "n1", "target": "n7", "relation_type": "contains", "confidence": 1.0, "evidence": "文章指出传统 RAG 在跨文档推理时表现不佳"},
+        {"temp_id": "e7", "source": "n8", "target": "n9", "relation_type": "improves", "confidence": 0.95, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "e8", "source": "n8", "target": "n3", "relation_type": "depends_on", "confidence": 0.95, "evidence": "GraphRAG 的核心思路是先将文档集合转化为知识图谱"},
+        {"temp_id": "e9", "source": "n8", "target": "n11", "relation_type": "belongs_to", "confidence": 1.0, "evidence": "GraphRAG 是微软研究院提出的"},
+        {"temp_id": "e10", "source": "n5", "target": "n8", "relation_type": "supports", "confidence": 0.9, "evidence": "实验表明，GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"}
+    ]
+}, ensure_ascii=False, indent=2)
+
+_SKELETON_SYSTEM = (
+    "你是一个文章级骨架抽取模块。你的任务是快速分析文章并输出文章的宏观骨架信息。\n\n"
+    "只关注文章层面的宏观信息，不要提取具体实体（如人物、机构等）。\n\n"
+    "你需要输出以下内容：\n"
+    "1. summary: 1-2句话的文章摘要\n"
+    "2. topic_tags: 3-5 个主题标签，每个标签包含 name（标签名）和 confidence（0-1 的置信度）\n"
+    "3. core_claims: 2-4 个文章核心观点，每个观点包含 name（观点标题）和 description（简短描述）\n\n"
+    "重要：不要提取具体的人名、组织名、工具名等实体，只提取文章层面的大局信息。\n\n"
+    "输出严格 JSON，不要输出 Markdown，不要输出解释文字。\n"
+    "输出格式：\n"
+    "{\n"
+    '  "summary": "文章摘要",\n'
+    '  "topic_tags": [\n'
+    '    {"name": "标签名", "confidence": 0.9}\n'
+    "  ],\n"
+    '  "core_claims": [\n'
+    '    {"name": "观点标题", "description": "观点描述"}\n'
+    "  ]\n"
+    "}\n\n"
+    "示例：\n"
+    f"输入：{_FEWSHOT_INPUT}\n"
+    f"输出：{_FEWSHOT_SKELETON_OUTPUT}"
+)
+
+_EXPAND_SYSTEM = (
+    "你是一个知识图谱展开模块。你的任务是基于文章骨架信息，将骨架展开为完整的知识图谱。\n\n"
+    "你需要在一次调用中输出完整的 nodes 和 edges。\n\n"
+    "展开规则：\n"
+    "1. 将 topic_tags 中的每个标签创建为 topic 类型的节点\n"
+    "2. 将 core_claims 中的每个观点创建为 claim 类型的节点\n"
+    "3. 创建一个 article 类型的节点代表文章整体\n"
+    "4. 围绕每个 claim，展开相关实体（人物、方法、概念、工具、组织等）\n"
+    "5. 通过以下关系连接节点：\n"
+    "   - article → topic: 使用 tag 关系（文章被打上该主题标签）\n"
+    "   - article → claim: 使用 contains 关系（文章包含该观点）\n"
+    "6. 为每条边提供 evidence，尽量引用原文中的句子\n"
+    "7. confidence 反映你对这条关系的确信程度（0-1）\n"
+    "8. 输出严格 JSON，不要输出 Markdown\n\n"
+    + _RELATION_GUIDANCE +
+    "\n节点类型只能使用：\n"
+    "article, concept, claim, topic, person, organization, paper, project, "
+    "framework, tool, method, technology, question\n\n"
+    "输出 JSON 格式：\n"
+    "{\n"
+    '  "nodes": [\n'
+    '    {"temp_id": "n1", "node_type": "类型", "name": "名称", "description": "描述"}\n'
+    "  ],\n"
+    '  "edges": [\n'
+    '    {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "关系类型", "confidence": 0.9, "evidence": "原文证据"}\n'
+    "  ]\n"
+    "}\n\n"
+    "示例：\n"
+    f"输出：{_FEWSHOT_EXPAND_OUTPUT}"
+)
+
 # ── Stage prompts ──
 
 _STAGE1_SYSTEM = (
@@ -366,6 +476,55 @@ class GraphExtractor:
         result = _validate_and_sanitize({"summary": summary, "nodes": nodes, "edges": edges})
         logger.info("Extraction complete: %d nodes, %d edges", len(result["nodes"]), len(result["edges"]))
         return result
+
+    # ── Progressive extraction methods (2-step skeleton + expand) ──
+
+    async def run_skeleton(self, title: str, content: str) -> dict:
+        """Step 1: Extract article-level skeleton (summary, topic_tags, core_claims)."""
+        logger.info("Skeleton: Extracting article-level skeleton")
+        article_prompt = f"文章标题：{title}\n\n文章内容：\n{content}"
+
+        raw = await self._llm.generate_json(system_prompt=_SKELETON_SYSTEM, user_prompt=article_prompt)
+        skeleton = _parse_json_response(raw)
+        if not skeleton:
+            logger.warning("Skeleton extraction returned invalid response, using defaults")
+            skeleton = {}
+
+        skeleton.setdefault("summary", "")
+        skeleton.setdefault("topic_tags", [])
+        skeleton.setdefault("core_claims", [])
+
+        logger.info(
+            "Skeleton complete: %d topic_tags, %d core_claims",
+            len(skeleton["topic_tags"]),
+            len(skeleton["core_claims"]),
+        )
+        return skeleton
+
+    async def run_expand(self, title: str, content: str, skeleton: dict) -> dict:
+        """Step 2: Expand skeleton into full knowledge graph (nodes + edges)."""
+        logger.info("Expand: Expanding skeleton into full graph")
+        expand_prompt = (
+            f"文章标题：{title}\n\n文章内容：\n{content}\n\n"
+            f"骨架信息：\n{json.dumps(skeleton, ensure_ascii=False, indent=2)}\n\n"
+            "请基于以上骨架信息，展开为完整的知识图谱（nodes + edges）。"
+        )
+
+        raw = await self._llm.generate_json(system_prompt=_EXPAND_SYSTEM, user_prompt=expand_prompt)
+        expanded = _parse_json_response(raw)
+        if not expanded:
+            logger.warning("Expand step returned invalid response, using defaults")
+            expanded = {}
+
+        expanded.setdefault("nodes", [])
+        expanded.setdefault("edges", [])
+
+        logger.info(
+            "Expand complete: %d nodes, %d edges",
+            len(expanded["nodes"]),
+            len(expanded["edges"]),
+        )
+        return expanded
 
     # ── Individual stage methods (callable independently) ──
 
