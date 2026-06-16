@@ -189,6 +189,24 @@ class GraphStore:
         nodes = result.scalars().all()
         return [self._node_to_dict(n) for n in nodes]
 
+    async def ensure_me_node(self) -> UUID:
+        """获取或创建唯一的 person 节点（"我"），作为全局图根节点。"""
+        result = await self.db.execute(
+            select(Node).where(
+                and_(Node.node_type == "person", Node.status == "active")
+            ).limit(1)
+        )
+        me = result.scalar_one_or_none()
+        if me:
+            return me.id
+        me_id = await self.create_node(
+            node_type="person",
+            name="我",
+            description="知识图谱中心节点",
+        )
+        await self.db.flush()
+        return me_id
+
     async def get_edges_for_nodes(self, node_ids: List[UUID]) -> List[dict]:
         result = await self.db.execute(
             select(Edge).where(

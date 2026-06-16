@@ -91,7 +91,7 @@ export async function applyClusteringProposal(proposalId: string): Promise<Apply
 
 // ── Global Graph ──
 
-export async function getGlobalGraph(filterType: 'all' | 'topic' | 'article' = 'all') {
+export async function getGlobalGraph(filterType: 'all' | 'topic' | 'article' | 'partition' = 'all') {
   const res = await api.get('/graph/global', { params: { filter_type: filterType } });
   return res.data;
 }
@@ -135,6 +135,56 @@ export async function saveStep2(documentId: string, data: unknown) {
   return res.data;
 }
 
+export async function streamStep2(
+  documentId: string,
+  onChunk: (text: string) => void,
+): Promise<{ session_id: string; step: number; data: { nodes: unknown[]; edges: unknown[] } }> {
+  const response = await fetch(`/api/extraction/${documentId}/step2/stream`, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream' },
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: { session_id: string; step: number; data: { nodes: unknown[]; edges: unknown[] } } | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      let msg;
+      try {
+        msg = JSON.parse(payload);
+      } catch {
+        // Ignore unparseable SSE lines (partial chunks, keepalives)
+        continue;
+      }
+      if (msg.type === 'chunk') {
+        onChunk(msg.text);
+      } else if (msg.type === 'done') {
+        result = msg.result;
+      } else if (msg.type === 'error') {
+        throw new Error(msg.message || 'Stream error');
+      }
+    }
+  }
+
+  if (!result) throw new Error('Stream ended without result');
+  return result;
+}
+
 export async function finalizeExtraction(documentId: string) {
   const res = await api.post(`/extraction/${documentId}/finalize`);
   return res.data;
@@ -156,5 +206,27 @@ export async function graphEnhancedSearch(query: string, topK = 10): Promise<Sea
 
 export async function askQuestion(question: string): Promise<AskResponse> {
   const res = await api.post<AskResponse>('/qa/ask', { question });
+  return res.data;
+}
+
+// ── Partitions ──
+
+export async function listPartitions() {
+  const res = await api.get('/partitions');
+  return res.data;
+}
+
+export async function createPartition(name: string, description: string = '') {
+  const res = await api.post('/partitions', { name, description });
+  return res.data;
+}
+
+export async function updatePartition(partitionId: string, data: { name?: string; description?: string }) {
+  const res = await api.put(`/partitions/${partitionId}`, data);
+  return res.data;
+}
+
+export async function deletePartition(partitionId: string) {
+  const res = await api.delete(`/partitions/${partitionId}`);
   return res.data;
 }

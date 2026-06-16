@@ -58,12 +58,18 @@ class ClusteringService:
         if not tags:
             return {"error": "No topic tags found. Complete extraction first."}
 
+        # 分区匹配
+        partition_action = await self.planner.match_partition(title, summary, tags)
+
         proposal = await self.planner.generate_proposal(
             article_title=title,
             article_summary=summary,
             tags=tags,
             document_id=document_id,
         )
+
+        # 注入 partition_action
+        proposal["partition_action"] = partition_action
 
         db_proposal = InsertionProposal(
             id=uuid4(),
@@ -122,12 +128,52 @@ class ClusteringService:
 
         proposal = prop.proposal_json
         document_id = proposal["document_id"]
+        partition_action = proposal.get("partition_action", {})
         tag_actions = proposal.get("tag_actions", [])
         topic_edges = proposal.get("topic_edges", [])
 
         tag_to_topic_id: dict[str, str] = {}
         applied = []
         failed = []
+
+        # ── 处理分区归属 ──
+        partition_id = None
+        if partition_action:
+            me_id = await self.graph_store.ensure_me_node()
+
+            if partition_action.get("action") == "NEW":
+                pname = partition_action.get("proposed_name", "").strip()
+                pdesc = partition_action.get("proposed_description", "")
+                if pname:
+                    try:
+                        partition_id = await self.graph_store.create_node(
+                            node_type="partition",
+                            name=pname,
+                            description=pdesc,
+                        )
+                        await self.graph_store.create_edge(
+                            source_id=me_id,
+                            target_id=partition_id,
+                            relation_type="root",
+                            confidence=1.0,
+                        )
+                        try:
+                            emb = await self.embedding.embed(f"{pname} {pdesc}".strip())
+                            await self.vector_store.upsert_node_embedding(partition_id, emb)
+                        except Exception as e:
+                            logger.warning(f"New partition embedding failed: {e}")
+                        applied.append(f"NEW partition: {pname}")
+                    except Exception as e:
+                        failed.append(f"New partition creation: {e}")
+            elif partition_action.get("action") == "MATCH":
+                target_id = partition_action.get("target_partition_id")
+                if target_id:
+                    try:
+                        from uuid import UUID
+                        partition_id = UUID(target_id)
+                        applied.append(f"MATCH partition: {partition_action.get('target_partition_name', '')}")
+                    except Exception as e:
+                        failed.append(f"Partition match: {e}")
 
         for action in tag_actions:
             try:
@@ -142,6 +188,17 @@ class ClusteringService:
                         await self.vector_store.upsert_node_embedding(topic_id, emb)
                     except Exception as e:
                         logger.warning(f"Topic embedding failed: {e}")
+                    # topic --part_of--> partition
+                    if partition_id:
+                        try:
+                            await self.graph_store.create_edge(
+                                source_id=topic_id,
+                                target_id=partition_id,
+                                relation_type="part_of",
+                                confidence=0.8,
+                            )
+                        except Exception as e:
+                            logger.warning(f"Topic part_of partition failed: {e}")
                     tag_to_topic_id[action["tag_name"]] = str(topic_id)
                     applied.append(f"NEW topic: {action['tag_name']}")
                 elif action["action"] == "MERGE" and action.get("target_topic_id"):
@@ -169,6 +226,20 @@ class ClusteringService:
         except Exception as e:
             failed.append(f"Article node creation: {e}")
             return {"error": "Failed to create article node", "details": str(e), "applied": applied, "failed": failed}
+
+        # article --belongs_to--> partition
+        if partition_id:
+            try:
+                await self.graph_store.create_edge(
+                    source_id=article_id,
+                    target_id=partition_id,
+                    relation_type="belongs_to",
+                    confidence=1.0,
+                    evidence_document_id=document_id,
+                )
+                applied.append("EDGE article -> partition (belongs_to)")
+            except Exception as e:
+                failed.append(f"Article belongs_to partition: {e}")
 
         for tag_name, topic_id in tag_to_topic_id.items():
             try:

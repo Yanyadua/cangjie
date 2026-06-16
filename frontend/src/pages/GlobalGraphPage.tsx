@@ -4,7 +4,7 @@ import { getGlobalGraph, getLocalGraph, getNodeDetail } from '../api/client';
 import type { GraphNode, GraphEdge } from '../types/graph';
 import { NODE_COLORS } from '../types/graph';
 
-type FilterType = 'all' | 'topic' | 'article';
+type FilterType = 'all' | 'topic' | 'article' | 'partition';
 
 export default function GlobalGraphPage() {
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
@@ -106,6 +106,7 @@ export default function GlobalGraphPage() {
 
   const topicCount = graphData.nodes.filter(n => n.nodeType === 'topic').length;
   const articleCount = graphData.nodes.filter(n => n.nodeType === 'article').length;
+  const partitionCount = graphData.nodes.filter(n => n.nodeType === 'partition').length;
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
@@ -119,12 +120,12 @@ export default function GlobalGraphPage() {
             {loading ? '搜索中...' : '搜索'}
           </button>
           <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-            {(['all', 'topic', 'article'] as FilterType[]).map(ft => (
+            {(['all', 'topic', 'article', 'partition'] as FilterType[]).map(ft => (
               <button key={ft} onClick={() => setFilterType(ft)} style={{
                 padding: '6px 12px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
                 background: filterType === ft ? '#3b82f6' : '#f1f5f9', color: filterType === ft ? '#fff' : '#64748b', border: 'none',
               }}>
-                {ft === 'all' ? `全部 (${topicCount + articleCount})` : ft === 'topic' ? `主题 (${topicCount})` : `文章 (${articleCount})`}
+                {ft === 'all' ? `全部 (${topicCount + articleCount})` : ft === 'topic' ? `主题 (${topicCount})` : ft === 'article' ? `文章 (${articleCount})` : `分区 (${partitionCount})`}
               </button>
             ))}
           </div>
@@ -158,6 +159,7 @@ export default function GlobalGraphPage() {
         ) : (
           <div style={{ padding: 16, color: '#94a3b8', fontSize: 13 }}>
             点击节点查看详情<br /><br />
+            点击<b>分区</b>查看分区下内容<br />
             点击<b>主题</b>节点展开邻居<br />
             点击<b>文章</b>节点查看内部图谱
           </div>

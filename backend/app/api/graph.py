@@ -40,7 +40,7 @@ async def get_global_graph(
     filter_type: str = "all",
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the full global graph or filter by node type (topic/article)."""
+    """Get the full global graph or filter by node type."""
     store = GraphStore(db)
     all_nodes = await store.get_all_active_nodes()
 
@@ -48,6 +48,12 @@ async def get_global_graph(
         nodes = [n for n in all_nodes if n["node_type"] == "topic"]
     elif filter_type == "article":
         nodes = [n for n in all_nodes if n["node_type"] == "article"]
+    elif filter_type == "partition":
+        # 分区视图：展示 我 + 分区 + topic + article 的层级结构
+        nodes = [
+            n for n in all_nodes
+            if n["node_type"] in ("person", "partition", "topic", "article")
+        ]
     else:
         nodes = [n for n in all_nodes if n["node_type"] in ("topic", "article")]
 

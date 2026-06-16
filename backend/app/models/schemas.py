@@ -10,13 +10,27 @@ from pydantic import BaseModel, Field
 NODE_TYPES = [
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology", "question", "chunk",
+    "partition",
 ]
 
 RELATION_TYPES = [
     "related_to", "contains", "part_of", "supports", "contradicts",
     "depends_on", "implements", "improves", "causes", "compares_with",
     "derived_from", "used_for", "evidence_for", "mentions", "similar_to", "belongs_to",
+    "root", "tag",
 ]
+
+
+# ── Partition ──
+
+class PartitionCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+class PartitionUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class GraphNode(BaseModel):

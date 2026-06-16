@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getClusteringProposal, updateClusteringProposal, applyClusteringProposal } from '../api/client';
-import type { TagAction, ClusteringProposalJSON } from '../types/graph';
+import { getClusteringProposal, updateClusteringProposal, applyClusteringProposal, listPartitions } from '../api/client';
+import type { TagAction, ClusteringProposalJSON, PartitionAction } from '../types/graph';
+
+const activeBtnStyle: React.CSSProperties = {
+  padding: '6px 14px', background: '#3b82f6', color: '#fff',
+  border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13,
+};
+const inactiveBtnStyle: React.CSSProperties = {
+  padding: '6px 14px', background: '#fff', color: '#64748b',
+  border: '1px solid #e2e8f0', borderRadius: 4, cursor: 'pointer', fontSize: 13,
+};
 
 export default function ClusteringProposalPage() {
   const { id } = useParams<{ id: string }>();
@@ -11,15 +20,39 @@ export default function ClusteringProposalPage() {
   const [applying, setApplying] = useState(false);
   const [editedActions, setEditedActions] = useState<TagAction[]>([]);
 
+  // 分区选择 state
+  const [partitionMode, setPartitionMode] = useState<'auto' | 'match' | 'new'>('auto');
+  const [selectedPartitionId, setSelectedPartitionId] = useState<string>('');
+  const [newPartitionName, setNewPartitionName] = useState('');
+  const [newPartitionDesc, setNewPartitionDesc] = useState('');
+  const [allPartitions, setAllPartitions] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+
   useEffect(() => {
     if (!id) return;
     getClusteringProposal(id)
       .then((res) => {
-        setProposal(res.proposal_json);
-        setEditedActions(res.proposal_json.tag_actions);
+        const pj = res.proposal_json as ClusteringProposalJSON;
+        setProposal(pj);
+        setEditedActions(pj.tag_actions);
+
+        // 初始化分区选择
+        const pa = pj.partition_action;
+        if (pa) {
+          if (pa.action === 'MATCH') {
+            setSelectedPartitionId(pa.target_partition_id || '');
+          } else if (pa.action === 'NEW') {
+            setNewPartitionName(pa.proposed_name || '');
+            setNewPartitionDesc(pa.proposed_description || '');
+          }
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    // 加载所有分区列表（供手动选择）
+    listPartitions()
+      .then((data) => setAllPartitions(data || []))
+      .catch(() => {});
   }, [id]);
 
   const toggleAction = (idx: number) => {
@@ -45,11 +78,39 @@ export default function ClusteringProposalPage() {
     setProposal(prev => prev ? { ...prev, topic_edges: prev.topic_edges.filter((_, i) => i !== idx) } : prev);
   };
 
+  const buildFinalPartitionAction = (): PartitionAction | undefined => {
+    if (!proposal?.partition_action) return undefined;
+    const base = proposal.partition_action;
+    if (partitionMode === 'auto') return base;
+    if (partitionMode === 'match') {
+      if (!selectedPartitionId) return { ...base, action: 'MATCH' as const, target_partition_id: '', target_partition_name: '' };
+      const target = allPartitions.find(p => p.id === selectedPartitionId);
+      return {
+        ...base,
+        action: 'MATCH' as const,
+        target_partition_id: selectedPartitionId,
+        target_partition_name: target?.name || '',
+      };
+    }
+    // new
+    return {
+      ...base,
+      action: 'NEW' as const,
+      proposed_name: newPartitionName.trim(),
+      proposed_description: newPartitionDesc,
+    };
+  };
+
   const handleApply = async () => {
     if (!id || !proposal) return;
     setApplying(true);
     try {
-      const updated = { ...proposal, tag_actions: editedActions };
+      const finalPA = buildFinalPartitionAction();
+      const updated = {
+        ...proposal,
+        partition_action: finalPA || proposal.partition_action,
+        tag_actions: editedActions,
+      };
       await updateClusteringProposal(id, updated);
       const result = await applyClusteringProposal(id);
       if (result.status === 'applied') {
@@ -67,6 +128,8 @@ export default function ClusteringProposalPage() {
   if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
   if (!proposal) return <div style={{ padding: 24 }}>未找到聚类提案</div>;
 
+  const pa = proposal.partition_action;
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: 24 }}>
       {/* Header */}
@@ -75,6 +138,96 @@ export default function ClusteringProposalPage() {
         <div style={{ fontSize: 15, fontWeight: 600, color: '#1e293b' }}>{proposal.article_title}</div>
         <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{proposal.article_summary}</div>
       </div>
+
+      {/* 分区归属卡片 */}
+      {pa && (
+        <div style={{ marginBottom: 24, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <h3 style={{ fontSize: 15, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+            📁 分区归属
+            {pa.action === 'NEW' && (
+              <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e' }}>
+                建议新建分区
+              </span>
+            )}
+            {pa.action === 'MATCH' && (
+              <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: '#dbeafe', color: '#1d4ed8' }}>
+                匹配到「{pa.target_partition_name}」({(pa.score * 100).toFixed(0)}%)
+              </span>
+            )}
+          </h3>
+
+          {pa.reason && (
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>{pa.reason}</div>
+          )}
+
+          {/* 模式切换 */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <button onClick={() => setPartitionMode('auto')} style={partitionMode === 'auto' ? activeBtnStyle : inactiveBtnStyle}>
+              按建议
+            </button>
+            <button onClick={() => setPartitionMode('match')} style={partitionMode === 'match' ? activeBtnStyle : inactiveBtnStyle}>
+              挂载已有
+            </button>
+            <button onClick={() => setPartitionMode('new')} style={partitionMode === 'new' ? activeBtnStyle : inactiveBtnStyle}>
+              新建分区
+            </button>
+          </div>
+
+          {/* auto 模式 */}
+          {partitionMode === 'auto' && pa.action === 'MATCH' && (
+            <div style={{ fontSize: 14, color: '#1e293b' }}>→ {pa.target_partition_name}</div>
+          )}
+          {partitionMode === 'auto' && pa.action === 'NEW' && (
+            <div style={{ fontSize: 14, color: '#1e293b' }}>
+              → 新建「{pa.proposed_name}」{pa.proposed_description && <span style={{ color: '#64748b' }}> — {pa.proposed_description}</span>}
+            </div>
+          )}
+
+          {/* match 模式 */}
+          {partitionMode === 'match' && (
+            <select
+              value={selectedPartitionId}
+              onChange={e => setSelectedPartitionId(e.target.value)}
+              style={{ width: '100%', padding: 8, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 14 }}
+            >
+              <option value="">请选择分区...</option>
+              {allPartitions.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* new 模式 */}
+          {partitionMode === 'new' && (
+            <div>
+              <input
+                value={newPartitionName}
+                onChange={e => setNewPartitionName(e.target.value)}
+                placeholder="分区名（如：智能体）"
+                style={{ width: '100%', padding: 8, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 14, marginBottom: 6 }}
+              />
+              <input
+                value={newPartitionDesc}
+                onChange={e => setNewPartitionDesc(e.target.value)}
+                placeholder="分区描述..."
+                style={{ width: '100%', padding: 8, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13 }}
+              />
+            </div>
+          )}
+
+          {/* 候选列表 */}
+          {pa.candidates?.length > 0 && partitionMode !== 'new' && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>其他候选分区:</div>
+              {pa.candidates.map(c => (
+                <div key={c.id} style={{ fontSize: 12, color: '#64748b', padding: '2px 0' }}>
+                  {c.name} — {(c.score * 100).toFixed(0)}%
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tag Actions */}
       <div style={{ marginBottom: 24 }}>

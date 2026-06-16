@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from .llm_client import LLMClient
 
@@ -27,13 +27,14 @@ logger = logging.getLogger(__name__)
 VALID_NODE_TYPES = frozenset({
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology", "question",
+    "partition",
 })
 
 VALID_RELATION_TYPES = frozenset({
     "related_to", "contains", "part_of", "supports", "contradicts",
     "depends_on", "implements", "improves", "causes", "compares_with",
     "derived_from", "used_for", "evidence_for", "mentions", "similar_to",
-    "belongs_to",
+    "belongs_to", "root", "tag",
 })
 
 REQUIRED_NODE_FIELDS = {"temp_id", "node_type", "name", "description"}
@@ -439,6 +440,15 @@ def _calibrate_confidence(edges: list[dict], source_text: str) -> list[dict]:
 
 # ── Main extractor ──
 
+def _build_expand_prompt(title: str, content: str, skeleton: dict) -> str:
+    """Build the user prompt for the expand step."""
+    return (
+        f"文章标题：{title}\n\n文章内容：\n{content}\n\n"
+        f"骨架信息：\n{json.dumps(skeleton, ensure_ascii=False, indent=2)}\n\n"
+        "请基于以上骨架信息，展开为完整的知识图谱（nodes + edges）。"
+    )
+
+
 class GraphExtractor:
     """Multi-stage knowledge graph extractor with few-shot guidance."""
 
@@ -504,11 +514,7 @@ class GraphExtractor:
     async def run_expand(self, title: str, content: str, skeleton: dict) -> dict:
         """Step 2: Expand skeleton into full knowledge graph (nodes + edges)."""
         logger.info("Expand: Expanding skeleton into full graph")
-        expand_prompt = (
-            f"文章标题：{title}\n\n文章内容：\n{content}\n\n"
-            f"骨架信息：\n{json.dumps(skeleton, ensure_ascii=False, indent=2)}\n\n"
-            "请基于以上骨架信息，展开为完整的知识图谱（nodes + edges）。"
-        )
+        expand_prompt = _build_expand_prompt(title, content, skeleton)
 
         raw = await self._llm.generate_json(system_prompt=_EXPAND_SYSTEM, user_prompt=expand_prompt)
         expanded = _parse_json_response(raw)
@@ -525,6 +531,47 @@ class GraphExtractor:
             len(expanded["edges"]),
         )
         return expanded
+
+    async def run_expand_stream(
+        self, title: str, content: str, skeleton: dict
+    ) -> AsyncGenerator[tuple[str, str], None]:
+        """Stream expand step, yielding (event, data) tuples.
+
+        Events:
+          - ("chunk", text)  — incremental LLM output
+          - ("done", json)   — final parsed result
+          - ("error", msg)   — on failure
+        """
+        logger.info("Expand (stream): Expanding skeleton into full graph")
+        expand_prompt = _build_expand_prompt(title, content, skeleton)
+
+        accumulated: list[str] = []
+        try:
+            async for delta in self._llm.generate_stream(
+                prompt=expand_prompt, system=_EXPAND_SYSTEM
+            ):
+                accumulated.append(delta)
+                yield ("chunk", delta)
+        except Exception as exc:
+            logger.exception("Expand stream failed")
+            yield ("error", str(exc))
+            return
+
+        raw_text = "".join(accumulated)
+        parsed = _parse_json_response(raw_text)
+        if not parsed:
+            yield ("error", "Failed to parse LLM output as JSON")
+            return
+
+        parsed.setdefault("nodes", [])
+        parsed.setdefault("edges", [])
+
+        logger.info(
+            "Expand (stream) complete: %d nodes, %d edges",
+            len(parsed["nodes"]),
+            len(parsed["edges"]),
+        )
+        yield ("done", parsed)
 
     # ── Individual stage methods (callable independently) ──
 
