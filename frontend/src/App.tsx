@@ -10,12 +10,14 @@ import SearchPage from './pages/SearchPage';
 import AskPage from './pages/AskPage';
 import ClusteringProposalPage from './pages/ClusteringProposalPage';
 import PartitionsPage from './pages/PartitionsPage';
+import MergePage from './pages/MergePage';
 
 const navItems = [
   { to: '/import', label: '导入' },
   { to: '/history', label: '历史' },
   { to: '/graph', label: '全局图谱' },
   { to: '/partitions', label: '分区' },
+  { to: '/merge', label: '合并去重' },
   { to: '/search', label: '搜索' },
   { to: '/ask', label: '问答' },
 ];
@@ -68,6 +70,7 @@ export default function App() {
             <Route path="/clustering/:id" element={<ClusteringProposalPage />} />
             <Route path="/graph" element={<GlobalGraphPage />} />
             <Route path="/partitions" element={<PartitionsPage />} />
+            <Route path="/merge" element={<MergePage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/ask" element={<AskPage />} />
           </Routes>

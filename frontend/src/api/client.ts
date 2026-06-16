@@ -230,3 +230,39 @@ export async function deletePartition(partitionId: string) {
   const res = await api.delete(`/partitions/${partitionId}`);
   return res.data;
 }
+
+export async function getPartitionChildren(partitionId: string) {
+  const res = await api.get(`/partitions/${partitionId}/children`);
+  return res.data;
+}
+
+export async function mergePartitions(sourceId: string, targetId: string) {
+  const res = await api.post('/partitions/merge', { source_id: sourceId, target_id: targetId });
+  return res.data;
+}
+
+export async function splitPartition(
+  partitionId: string,
+  topicIds: string[],
+  newPartitionName: string,
+  newPartitionDescription: string = '',
+) {
+  const res = await api.post(`/partitions/${partitionId}/split`, {
+    topic_ids: topicIds,
+    new_partition_name: newPartitionName,
+    new_partition_description: newPartitionDescription,
+  });
+  return res.data;
+}
+
+// ── Merge / Dedup ──
+
+export async function detectDuplicateTopics(threshold: number = 0.85) {
+  const res = await api.get('/graph/duplicates', { params: { threshold } });
+  return res.data;
+}
+
+export async function mergeNodes(sourceId: string, targetId: string) {
+  const res = await api.post('/graph/nodes/merge', { source_id: sourceId, target_id: targetId });
+  return res.data;
+}

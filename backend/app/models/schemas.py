@@ -33,6 +33,22 @@ class PartitionUpdateRequest(BaseModel):
     description: Optional[str] = None
 
 
+class NodeMergeRequest(BaseModel):
+    source_id: str
+    target_id: str
+
+
+class PartitionMergeRequest(BaseModel):
+    source_id: str
+    target_id: str
+
+
+class PartitionSplitRequest(BaseModel):
+    topic_ids: list[str]
+    new_partition_name: str
+    new_partition_description: str = ""
+
+
 class GraphNode(BaseModel):
     id: str
     nodeType: str = Field(alias="node_type")

@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -127,8 +127,31 @@ class GraphStore:
         return edge.id
 
     async def merge_nodes(self, source_id: UUID, target_id: UUID) -> UUID:
-        """Merge source node into target node. Target survives."""
-        # Reassign all edges from source to target
+        """Merge source node into target node. Target survives.
+
+        - source 的所有边转移到 target
+        - 转移后产生自环边（target→target）标记为 inactive
+        - source 名称作为别名添加到 target
+        - source 标记为 "merged"
+        """
+        if source_id == target_id:
+            raise ValueError("不能合并到自身")
+
+        # 校验 source 和 target 都存在且 active
+        src_result = await self.db.execute(
+            select(Node).where(and_(Node.id == source_id, Node.status == "active"))
+        )
+        source = src_result.scalar_one_or_none()
+        if not source:
+            raise ValueError(f"源节点不存在或已合并: {source_id}")
+
+        tgt_result = await self.db.execute(
+            select(Node).where(and_(Node.id == target_id, Node.status == "active"))
+        )
+        if not tgt_result.scalar_one_or_none():
+            raise ValueError(f"目标节点不存在或已合并: {target_id}")
+
+        # 转移所有边
         await self.db.execute(
             Edge.__table__.update()
             .where(Edge.source_node_id == source_id)
@@ -139,17 +162,28 @@ class GraphStore:
             .where(Edge.target_node_id == source_id)
             .values(target_node_id=target_id)
         )
-        # Add source name as alias on target
-        source_node = await self.db.execute(
-            select(Node).where(Node.id == source_id)
-        )
-        source = source_node.scalar_one_or_none()
-        if source:
-            alias = NodeAlias(id=uuid4(), node_id=target_id, alias=source.name)
-            self.db.add(alias)
-            # Mark source as merged
-            source.status = "merged"
 
+        # 清理自环边（合并后 target→target 的边）
+        await self.db.execute(
+            Edge.__table__.update()
+            .where(and_(
+                Edge.source_node_id == target_id,
+                Edge.target_node_id == target_id,
+                Edge.status == "active",
+            ))
+            .values(status="inactive")
+        )
+
+        # 添加别名（检查是否已存在同名别名）
+        existing_alias = await self.db.execute(
+            select(NodeAlias).where(
+                and_(NodeAlias.node_id == target_id, NodeAlias.alias == source.name)
+            )
+        )
+        if not existing_alias.scalar_one_or_none():
+            self.db.add(NodeAlias(id=uuid4(), node_id=target_id, alias=source.name))
+
+        source.status = "merged"
         await self.db.flush()
         return target_id
 
@@ -206,6 +240,113 @@ class GraphStore:
         )
         await self.db.flush()
         return me_id
+
+    async def detect_duplicate_topics(self, threshold: float = 0.85) -> List[dict]:
+        """检测全局图谱中语义相似的 topic 节点对。
+
+        用 pgvector cross-join 找出余弦相似度高于阈值的所有 topic 对。
+        返回 [{source, target, similarity}, ...] 按 similarity 降序。
+        """
+        distance_threshold = 1.0 - threshold
+        sql = text("""
+            SELECT a.id AS a_id, a.name AS a_name, a.description AS a_desc,
+                   b.id AS b_id, b.name AS b_name, b.description AS b_desc,
+                   a.embedding::vector <=> b.embedding::vector AS distance
+            FROM nodes a
+            JOIN nodes b ON a.id < b.id
+            WHERE a.node_type = 'topic' AND a.status = 'active' AND a.embedding IS NOT NULL
+              AND b.node_type = 'topic' AND b.status = 'active' AND b.embedding IS NOT NULL
+              AND a.embedding::vector <=> b.embedding::vector < :threshold
+            ORDER BY distance
+            LIMIT 50
+        """)
+        result = await self.db.execute(sql, {"threshold": distance_threshold})
+        rows = result.fetchall()
+        return [
+            {
+                "source": {
+                    "id": str(r.a_id), "name": r.a_name, "description": r.a_desc,
+                },
+                "target": {
+                    "id": str(r.b_id), "name": r.b_name, "description": r.b_desc,
+                },
+                "similarity": round(1.0 - r.distance, 4),
+            }
+            for r in rows
+        ]
+
+    async def reassign_edges(
+        self,
+        old_target_id: UUID,
+        new_target_id: UUID,
+        relation_types: List[str],
+    ) -> int:
+        """将指向 old_target 的指定类型 active 边转移到 new_target。
+
+        如果转移后产生重复边（同一 source→new_target 同一 relation_type），
+        保留原边并将重复边标记为 inactive。
+        返回转移的边数。
+        """
+        # 查出需要转移的边
+        result = await self.db.execute(
+            select(Edge).where(
+                and_(
+                    Edge.target_node_id == old_target_id,
+                    Edge.relation_type.in_(relation_types),
+                    Edge.status == "active",
+                )
+            )
+        )
+        edges_to_move = result.scalars().all()
+
+        moved = 0
+        for edge in edges_to_move:
+            # 检查是否已有相同的 source → new_target + relation_type 边
+            dup_check = await self.db.execute(
+                select(Edge).where(
+                    and_(
+                        Edge.source_node_id == edge.source_node_id,
+                        Edge.target_node_id == new_target_id,
+                        Edge.relation_type == edge.relation_type,
+                        Edge.status == "active",
+                    )
+                )
+            )
+            if dup_check.scalar_one_or_none():
+                # 已有相同边，标记这条为 inactive（丢弃）
+                edge.status = "inactive"
+            else:
+                edge.target_node_id = new_target_id
+                moved += 1
+
+        await self.db.flush()
+        return moved
+
+    async def get_partition_children(self, partition_id: UUID) -> dict:
+        """获取分区下的所有 topic 和 article 节点。"""
+        result = await self.db.execute(
+            select(Edge).where(
+                and_(
+                    Edge.target_node_id == partition_id,
+                    Edge.relation_type.in_(["part_of", "belongs_to"]),
+                    Edge.status == "active",
+                )
+            )
+        )
+        edges = result.scalars().all()
+        child_ids = [e.source_node_id for e in edges]
+
+        nodes = []
+        if child_ids:
+            node_result = await self.db.execute(
+                select(Node).where(Node.id.in_(child_ids))
+            )
+            nodes = node_result.scalars().all()
+
+        return {
+            "topics": [self._node_to_dict(n) for n in nodes if n.node_type == "topic"],
+            "articles": [self._node_to_dict(n) for n in nodes if n.node_type == "article"],
+        }
 
     async def get_edges_for_nodes(self, node_ids: List[UUID]) -> List[dict]:
         result = await self.db.execute(

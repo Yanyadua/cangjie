@@ -1,12 +1,16 @@
 from uuid import UUID
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.graph_store import GraphStore
 from ..database import get_db
+from ..models.schemas import NodeMergeRequest
 from ..services.graph_service import GraphService
+from ..services.merge_service import MergeService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -61,3 +65,31 @@ async def get_global_graph(
     edges = await store.get_edges_for_nodes(node_ids) if node_ids else []
 
     return {"nodes": nodes, "edges": edges}
+
+
+@router.get("/graph/duplicates")
+async def detect_duplicates(
+    threshold: float = 0.85,
+    db: AsyncSession = Depends(get_db),
+):
+    """检测全局图谱中语义相似的 topic 节点对。"""
+    service = MergeService(db)
+    return await service.detect_duplicate_topics(threshold)
+
+
+@router.post("/graph/nodes/merge")
+async def merge_nodes(
+    data: NodeMergeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """合并两个节点（source → target）。"""
+    if data.source_id == data.target_id:
+        raise HTTPException(status_code=400, detail="不能合并到自身")
+    service = MergeService(db)
+    try:
+        return await service.merge_nodes(data.source_id, data.target_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Merge nodes failed: {e}")
+        raise HTTPException(status_code=500, detail="合并失败")
