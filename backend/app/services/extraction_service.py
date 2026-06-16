@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -84,6 +84,22 @@ class ExtractionService:
 
     # ── Step 2: Expand skeleton into full graph ──
 
+    async def _save_expanded(self, session_id: str, expanded: dict) -> str:
+        """Persist expanded graph data to DraftGraph, return the dg id."""
+        result_db = await self.db.execute(
+            select(DraftGraph).where(DraftGraph.id == session_id)
+        )
+        dg = result_db.scalar_one()
+        gj = dg.graph_json
+        gj["step"] = 2
+        gj["expanded"] = expanded
+        dg.graph_json = json.loads(json.dumps(gj))
+        flag_modified(dg, "graph_json")
+        dg.status = "expanded"
+        await self.db.flush()
+        await self.db.commit()
+        return str(dg.id)
+
     async def run_step2(self, document_id: str) -> dict:
         content_tuple = await self._get_doc_content(document_id)
         if not content_tuple:
@@ -97,17 +113,42 @@ class ExtractionService:
         skeleton = session["graph_json"]["skeleton"]
         result = await self.extractor.run_expand(title, content, skeleton)
 
-        result_db = await self.db.execute(select(DraftGraph).where(DraftGraph.id == session["id"]))
-        dg = result_db.scalar_one()
-        gj = dg.graph_json
-        gj["step"] = 2
-        gj["expanded"] = result
-        dg.graph_json = json.loads(json.dumps(gj))
-        flag_modified(dg, "graph_json")
-        dg.status = "expanded"
-        await self.db.flush()
+        dg_id = await self._save_expanded(session["id"], result)
+        return {"session_id": dg_id, "step": 2, "data": result}
 
-        return {"session_id": str(dg.id), "step": 2, "data": result}
+    async def run_step2_stream(
+        self, document_id: str
+    ) -> AsyncGenerator[tuple[str, object], None]:
+        """Stream step2 expand, yielding (event, payload) tuples.
+
+        Events: "chunk" (str text), "done" (result dict), "error" (str msg).
+        Persists the expanded graph to DraftGraph on completion.
+        """
+        content_tuple = await self._get_doc_content(document_id)
+        if not content_tuple:
+            yield ("error", "Document not found")
+            return
+        title, content = content_tuple
+
+        session = await self._get_or_create_session(document_id)
+        if not session or "skeleton" not in session.get("graph_json", {}):
+            yield ("error", "Step 1 not completed")
+            return
+        skeleton = session["graph_json"]["skeleton"]
+        session_id = session["id"]
+
+        async for event, data in self.extractor.run_expand_stream(
+            title, content, skeleton
+        ):
+            if event == "done":
+                try:
+                    dg_id = await self._save_expanded(session_id, data)
+                    yield ("done", {"session_id": dg_id, "step": 2, "data": data})
+                except Exception as exc:
+                    await self.db.rollback()
+                    yield ("error", str(exc))
+            else:
+                yield (event, data)
 
     async def save_step2(self, document_id: str, data: dict) -> dict:
         session = await self._get_or_create_session(document_id)

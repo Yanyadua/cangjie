@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   runStep1, saveStep1,
-  runStep2, saveStep2,
+  streamStep2, saveStep2,
   finalizeExtraction,
 } from '../api/client';
 import type { NodeType, RelationType } from '../types/graph';
@@ -22,6 +22,13 @@ export default function ExtractionWizardPage() {
   const [step, setStep] = useState(0); // 0=loading, 1=skeleton, 2=expanded
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Streaming state
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const streamRef = useRef<HTMLDivElement>(null);
+  const chunkBufferRef = useRef('');
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Step 1: Skeleton data
   const [summary, setSummary] = useState('');
@@ -57,16 +64,38 @@ export default function ExtractionWizardPage() {
     if (!documentId) return;
     setLoading(true);
     setError('');
+    setStreamingText('');
+    chunkBufferRef.current = '';
+    setIsStreaming(true);
     try {
       await saveStep1(documentId, { summary, topic_tags: topicTags, core_claims: claims });
-      const res = await runStep2(documentId);
-      setNodes(res.data.nodes || []);
-      setEdges(res.data.edges || []);
+      const res = await streamStep2(documentId, (chunk) => {
+        chunkBufferRef.current += chunk;
+        if (!flushTimerRef.current) {
+          flushTimerRef.current = setTimeout(() => {
+            setStreamingText((prev) => prev + chunkBufferRef.current);
+            chunkBufferRef.current = '';
+            flushTimerRef.current = null;
+          }, 80);
+        }
+      });
+      // Flush any remaining buffered text
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      if (chunkBufferRef.current) {
+        setStreamingText((prev) => prev + chunkBufferRef.current);
+        chunkBufferRef.current = '';
+      }
+      setNodes((res.data.nodes || []) as NodeItem[]);
+      setEdges((res.data.edges || []) as EdgeItem[]);
       setStep(2);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || '展开失败');
+      setError(e?.response?.data?.detail || e?.message || '展开失败');
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -84,6 +113,12 @@ export default function ExtractionWizardPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [streamingText]);
 
   // ── Tag helpers ──
   const updateTag = (idx: number, value: string) => {
@@ -151,6 +186,39 @@ export default function ExtractionWizardPage() {
         <div style={{ padding: 10, background: '#fef2f2', color: '#dc2626', borderRadius: 6, marginBottom: 16 }}>{error}</div>
       )}
 
+      {/* Streaming panel */}
+      {isStreaming && (
+        <div style={{
+          marginBottom: 16,
+          border: '1px solid #1e293b',
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', background: '#1e293b', color: '#94a3b8', fontSize: 12,
+          }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%', background: '#10b981',
+              display: 'inline-block', animation: 'pulse 1s infinite',
+            }} />
+            正在展开知识图谱...
+          </div>
+          <div
+            ref={streamRef}
+            style={{
+              maxHeight: 360, overflowY: 'auto', background: '#0f172a',
+              padding: 12, fontFamily: "'Menlo', 'Monaco', monospace",
+              fontSize: 12, lineHeight: 1.6, color: '#a5f3fc',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}
+          >
+            {streamingText || <span style={{ color: '#475569' }}>等待 LLM 响应...</span>}
+            <span style={{ color: '#10b981' }}>▋</span>
+          </div>
+        </div>
+      )}
+
       {/* Step 1: Skeleton */}
       {step === 1 && (
         <div>
@@ -195,7 +263,7 @@ export default function ExtractionWizardPage() {
           <div style={{ marginTop: 20, textAlign: 'right' }}>
             <button onClick={handleSaveStep1} disabled={loading}
               style={{ padding: '10px 32px', background: loading ? '#94a3b8' : '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600 }}>
-              {loading ? '处理中...' : '确认骨架并展开图谱'}
+              {loading ? '生成中...' : '确认骨架并展开图谱'}
             </button>
           </div>
         </div>
