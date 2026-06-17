@@ -489,12 +489,23 @@ class GraphExtractor:
 
     # ── Progressive extraction methods (2-step skeleton + expand) ──
 
-    async def run_skeleton(self, title: str, content: str) -> dict:
+    async def run_skeleton(
+        self, title: str, content: str,
+        temperature: float = 0.3,
+        extra_instruction: str = "",
+    ) -> dict:
         """Step 1: Extract article-level skeleton (summary, topic_tags, core_claims)."""
         logger.info("Skeleton: Extracting article-level skeleton")
         article_prompt = f"文章标题：{title}\n\n文章内容：\n{content}"
 
-        raw = await self._llm.generate_json(system_prompt=_SKELETON_SYSTEM, user_prompt=article_prompt)
+        system = _SKELETON_SYSTEM
+        if extra_instruction:
+            system = system + "\n\n额外要求：\n" + extra_instruction
+
+        raw = await self._llm.generate_json(
+            system_prompt=system, user_prompt=article_prompt,
+            temperature=temperature,
+        )
         skeleton = _parse_json_response(raw)
         if not skeleton:
             logger.warning("Skeleton extraction returned invalid response, using defaults")
@@ -511,12 +522,23 @@ class GraphExtractor:
         )
         return skeleton
 
-    async def run_expand(self, title: str, content: str, skeleton: dict) -> dict:
+    async def run_expand(
+        self, title: str, content: str, skeleton: dict,
+        temperature: float = 0.3,
+        extra_instruction: str = "",
+    ) -> dict:
         """Step 2: Expand skeleton into full knowledge graph (nodes + edges)."""
         logger.info("Expand: Expanding skeleton into full graph")
         expand_prompt = _build_expand_prompt(title, content, skeleton)
 
-        raw = await self._llm.generate_json(system_prompt=_EXPAND_SYSTEM, user_prompt=expand_prompt)
+        system = _EXPAND_SYSTEM
+        if extra_instruction:
+            system = system + "\n\n额外要求：\n" + extra_instruction
+
+        raw = await self._llm.generate_json(
+            system_prompt=system, user_prompt=expand_prompt,
+            temperature=temperature,
+        )
         expanded = _parse_json_response(raw)
         if not expanded:
             logger.warning("Expand step returned invalid response, using defaults")

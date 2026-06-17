@@ -49,6 +49,11 @@ class PartitionSplitRequest(BaseModel):
     new_partition_description: str = ""
 
 
+class EvaluationRunRequest(BaseModel):
+    document_id: str
+    strategies: list[str] = ["concise", "standard", "detailed"]
+
+
 class GraphNode(BaseModel):
     id: str
     nodeType: str = Field(alias="node_type")

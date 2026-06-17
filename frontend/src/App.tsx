@@ -11,6 +11,7 @@ import AskPage from './pages/AskPage';
 import ClusteringProposalPage from './pages/ClusteringProposalPage';
 import PartitionsPage from './pages/PartitionsPage';
 import MergePage from './pages/MergePage';
+import EvaluationLabPage from './pages/EvaluationLabPage';
 
 const navItems = [
   { to: '/import', label: '导入' },
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/graph', label: '全局图谱' },
   { to: '/partitions', label: '分区' },
   { to: '/merge', label: '合并去重' },
+  { to: '/eval', label: '评估' },
   { to: '/search', label: '搜索' },
   { to: '/ask', label: '问答' },
 ];
@@ -71,6 +73,7 @@ export default function App() {
             <Route path="/graph" element={<GlobalGraphPage />} />
             <Route path="/partitions" element={<PartitionsPage />} />
             <Route path="/merge" element={<MergePage />} />
+            <Route path="/eval" element={<EvaluationLabPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/ask" element={<AskPage />} />
           </Routes>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import documents, draft_graphs, insertion, graph, search, qa, extraction, clustering, partitions
+from .api import documents, draft_graphs, insertion, graph, search, qa, extraction, clustering, partitions, evaluation
 
 app = FastAPI(
     title="Personal Knowledge Base",
@@ -26,6 +26,7 @@ app.include_router(graph.router, prefix="/api", tags=["graph"])
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(qa.router, prefix="/api", tags=["qa"])
 app.include_router(partitions.router, prefix="/api", tags=["partitions"])
+app.include_router(evaluation.router, prefix="/api", tags=["evaluation"])
 
 
 @app.get("/api/health")

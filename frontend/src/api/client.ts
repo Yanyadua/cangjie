@@ -266,3 +266,10 @@ export async function mergeNodes(sourceId: string, targetId: string) {
   const res = await api.post('/graph/nodes/merge', { source_id: sourceId, target_id: targetId });
   return res.data;
 }
+
+// ── Evaluation ──
+
+export async function runEvaluation(documentId: string, strategies: string[] = ['concise', 'standard', 'detailed']) {
+  const res = await api.post('/evaluation/run', { document_id: documentId, strategies });
+  return res.data;
+}

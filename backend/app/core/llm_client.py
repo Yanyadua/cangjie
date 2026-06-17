@@ -104,13 +104,14 @@ class LLMClient:
         system: str = "",
         system_prompt: str = "",
         user_prompt: str = "",
+        temperature: float = 0.3,
         retries: int = 2,
     ) -> dict:
         """Generate and parse JSON response from LLM."""
         # Support both calling conventions
         p = user_prompt or prompt
         s = system_prompt or system
-        raw = await self.generate(p, system=s)
+        raw = await self.generate(p, system=s, temperature=temperature)
 
         for attempt in range(retries + 1):
             try:
@@ -129,6 +130,7 @@ class LLMClient:
                     raw = await self.generate(
                         f"上一次输出不是合法 JSON，请重新输出。错误信息：{e}\n\n原始输出：\n{raw}",
                         system=system,
+                        temperature=temperature,
                     )
                 else:
                     raise ValueError(f"Failed to parse LLM JSON after {retries+1} attempts: {e}\nRaw: {raw}")
