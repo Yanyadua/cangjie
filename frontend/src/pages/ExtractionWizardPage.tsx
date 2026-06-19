@@ -38,6 +38,7 @@ export default function ExtractionWizardPage() {
   // Step 2: Expanded data
   const [nodes, setNodes] = useState<NodeItem[]>([]);
   const [edges, setEdges] = useState<EdgeItem[]>([]);
+  const [extractionMode, setExtractionMode] = useState<'standard' | 'proposition'>('standard');
 
   useEffect(() => {
     handleRunStep1();
@@ -78,7 +79,7 @@ export default function ExtractionWizardPage() {
             flushTimerRef.current = null;
           }, 80);
         }
-      });
+      }, extractionMode);
       // Flush any remaining buffered text
       if (flushTimerRef.current) {
         clearTimeout(flushTimerRef.current);
@@ -259,6 +260,21 @@ export default function ExtractionWizardPage() {
               <button onClick={() => removeClaim(idx)} style={{ marginTop: 4, padding: '4px 8px', background: '#fef2f2', border: 'none', borderRadius: 4, color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>删除</button>
             </div>
           ))}
+
+          {/* 抽取模式切换 */}
+          <div style={{ marginTop: 20, padding: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#92400e' }}>抽取模式（实验性）</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" checked={extractionMode === 'standard'} onChange={() => setExtractionMode('standard')} />
+                标准（默认，topic + claim + 实体）
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" checked={extractionMode === 'proposition'} onChange={() => setExtractionMode('proposition')} />
+                命题化（每个 claim 展开为 3-7 个自包含命题，还原度更高但节点更多）
+              </label>
+            </div>
+          </div>
 
           <div style={{ marginTop: 20, textAlign: 'right' }}>
             <button onClick={handleSaveStep1} disabled={loading}
