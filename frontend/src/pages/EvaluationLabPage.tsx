@@ -33,6 +33,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   concise: '简洁',
   standard: '标准',
   detailed: '详细',
+  proposition: '命题化',
 };
 
 function scoreColor(score: number): string {
@@ -103,7 +104,7 @@ export default function EvaluationLabPage() {
         <div style={{ marginBottom: 12 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: '#1e293b' }}>策略档位</label>
           <div style={{ display: 'flex', gap: 8 }}>
-            {['concise', 'standard', 'detailed'].map(s => (
+            {['concise', 'standard', 'detailed', 'proposition'].map(s => (
               <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, cursor: 'pointer' }}>
                 <input type="checkbox" checked={strategies.includes(s)} onChange={() => toggleStrategy(s)} />
                 {STRATEGY_LABELS[s]}
