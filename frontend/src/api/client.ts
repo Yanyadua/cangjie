@@ -138,8 +138,12 @@ export async function saveStep2(documentId: string, data: unknown) {
 export async function streamStep2(
   documentId: string,
   onChunk: (text: string) => void,
-): Promise<{ session_id: string; step: number; data: { nodes: unknown[]; edges: unknown[] } }> {
-  const response = await fetch(`/api/extraction/${documentId}/step2/stream`, {
+  mode: 'standard' | 'proposition' = 'standard',
+): Promise<{ session_id: string; step: number; mode: string; data: { nodes: unknown[]; edges: unknown[] } }> {
+  const url = mode === 'proposition'
+    ? `/api/extraction/${documentId}/step2/stream?mode=proposition`
+    : `/api/extraction/${documentId}/step2/stream`;
+  const response = await fetch(url, {
     method: 'GET',
     headers: { Accept: 'text/event-stream' },
   });
@@ -150,7 +154,7 @@ export async function streamStep2(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let result: { session_id: string; step: number; data: { nodes: unknown[]; edges: unknown[] } } | null = null;
+  let result: { session_id: string; step: number; mode: string; data: { nodes: unknown[]; edges: unknown[] } } | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -168,7 +172,6 @@ export async function streamStep2(
       try {
         msg = JSON.parse(payload);
       } catch {
-        // Ignore unparseable SSE lines (partial chunks, keepalives)
         continue;
       }
       if (msg.type === 'chunk') {
