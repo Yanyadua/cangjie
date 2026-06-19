@@ -30,6 +30,9 @@ VALID_NODE_TYPES = frozenset({
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology",
     "question", "chunk",
+    # TODO(phase2): 加 "proposition" / "section" 当 ClusteringService 开始
+    # 在 patch ops 中创建命题节点时。当前 Phase 1 命题节点只存在于
+    # DraftGraph.graph_json，不进入 patch 流水线。
 })
 
 VALID_RELATION_TYPES = frozenset({
