@@ -421,7 +421,6 @@ def _validate_and_sanitize(raw: dict) -> dict:
             continue
 
         temp_id = str(node["temp_id"])
-        valid_temp_ids.add(temp_id)
 
         clean_node: dict[str, Any] = {
             "temp_id": temp_id,
@@ -463,6 +462,10 @@ def _validate_and_sanitize(raw: dict) -> dict:
         if node_type == "section" and isinstance(node.get("claims"), list):
             clean_node["claims"] = node["claims"]
 
+        # 注册 temp_id 到 valid_temp_ids —— 注意必须在所有可能 continue
+        # （proposition 校验等）之后，否则被丢弃的节点会留下悬空 temp_id，
+        # 导致引用它们的 edge 误通过校验，产生 dangling edge。
+        valid_temp_ids.add(temp_id)
         clean_nodes.append(clean_node)
 
     # ── Validate edges ──
@@ -520,15 +523,36 @@ def _validate_and_sanitize(raw: dict) -> dict:
             "evidence": evidence,
         })
 
-    # 检查 proposition 的 parent_claim_id 是否指向有效 claim 节点
+    # ── 检查 proposition 的 parent_claim_id 是否指向有效 claim 节点 ──
+    # 警告只记录但不删除会让图谱悬空，所以这里做实际过滤
     claim_temp_ids = {
         n["temp_id"] for n in clean_nodes if n["node_type"] == "claim"
     }
+    orphan_prop_ids: set[str] = set()
     for parent in parent_claim_ids:
         if parent not in claim_temp_ids:
             errors.append(
                 f"proposition.parent_claim_id '{parent}' 未在 claim 节点中找到"
             )
+            # 收集所有指向该无效 parent 的 proposition
+            orphan_prop_ids.update(
+                n["temp_id"] for n in clean_nodes
+                if n["node_type"] == "proposition"
+                and n.get("parent_claim_id") == parent
+            )
+
+    # 从 clean_nodes 中移除孤儿 proposition
+    if orphan_prop_ids:
+        clean_nodes = [n for n in clean_nodes if n["temp_id"] not in orphan_prop_ids]
+        # 从 clean_edges 中移除引用孤儿 proposition 的边
+        clean_edges = [
+            e for e in clean_edges
+            if e["source"] not in orphan_prop_ids
+            and e["target"] not in orphan_prop_ids
+        ]
+        errors.append(
+            f"已移除 {len(orphan_prop_ids)} 个孤儿 proposition 及其相关边"
+        )
 
     if errors:
         logger.warning("Graph extraction validation produced %d warning(s): %s", len(errors), "; ".join(errors))
@@ -658,6 +682,8 @@ class GraphExtractor:
           - "standard": 现状（topic + claim + 实体节点）
           - "proposition": 命题化（claim 节点下展开 3-7 个自包含命题节点）
         """
+        if mode not in ("standard", "proposition"):
+            raise ValueError(f"Unknown extraction mode: {mode!r}. Must be 'standard' or 'proposition'.")
         logger.info("Expand (mode=%s): Expanding skeleton into full graph", mode)
         expand_prompt = _build_expand_prompt(title, content, skeleton)
 
@@ -698,6 +724,8 @@ class GraphExtractor:
           - ("done", json)   — final parsed result
           - ("error", msg)   — on failure
         """
+        if mode not in ("standard", "proposition"):
+            raise ValueError(f"Unknown extraction mode: {mode!r}. Must be 'standard' or 'proposition'.")
         logger.info("Expand (stream, mode=%s): Expanding skeleton into full graph", mode)
         expand_prompt = _build_expand_prompt(title, content, skeleton)
 
