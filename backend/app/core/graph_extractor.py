@@ -402,6 +402,8 @@ def _validate_and_sanitize(raw: dict) -> dict:
     # ── Validate nodes ──
     valid_temp_ids: set[str] = set()
     clean_nodes: list[dict[str, Any]] = []
+    parent_claim_ids: set[str] = set()  # 用于校验 proposition 的 parent_claim_id
+    proposition_counts: dict[str, int] = {}  # 每个 claim 下的 proposition 计数
 
     for idx, node in enumerate(raw_nodes):
         if not isinstance(node, dict):
@@ -420,12 +422,48 @@ def _validate_and_sanitize(raw: dict) -> dict:
 
         temp_id = str(node["temp_id"])
         valid_temp_ids.add(temp_id)
-        clean_nodes.append({
+
+        clean_node: dict[str, Any] = {
             "temp_id": temp_id,
             "node_type": node_type,
             "name": str(node["name"]),
             "description": str(node["description"]),
-        })
+        }
+
+        # ── Proposition 特殊校验 ──
+        if node_type == "proposition":
+            desc = clean_node["description"]
+            if len(desc) < 30:
+                errors.append(
+                    f"nodes[{idx}] proposition.description 长度 <30（标签化），skipped"
+                )
+                continue
+
+            parent = str(node.get("parent_claim_id", "")).strip()
+            if not parent:
+                # prompt 明确要求 parent_claim_id（"必须"），缺失则丢弃该命题
+                errors.append(
+                    f"nodes[{idx}] proposition 缺少 parent_claim_id，skipped"
+                )
+                continue
+            parent_claim_ids.add(parent)
+            proposition_counts[parent] = proposition_counts.get(parent, 0) + 1
+            if proposition_counts[parent] > 7:
+                errors.append(
+                    f"nodes[{idx}] claim '{parent}' 下 proposition 已达 7 个上限，skipped"
+                )
+                continue
+            clean_node["parent_claim_id"] = parent
+
+            # 透传 metadata（data_points/conditions/citations）
+            if isinstance(node.get("metadata"), dict):
+                clean_node["metadata"] = node["metadata"]
+
+        # ── Section 特殊处理（弱化：不强制 claims 字段，但允许）──
+        if node_type == "section" and isinstance(node.get("claims"), list):
+            clean_node["claims"] = node["claims"]
+
+        clean_nodes.append(clean_node)
 
     # ── Validate edges ──
     clean_edges: list[dict[str, Any]] = []
@@ -481,6 +519,16 @@ def _validate_and_sanitize(raw: dict) -> dict:
             "confidence": confidence,
             "evidence": evidence,
         })
+
+    # 检查 proposition 的 parent_claim_id 是否指向有效 claim 节点
+    claim_temp_ids = {
+        n["temp_id"] for n in clean_nodes if n["node_type"] == "claim"
+    }
+    for parent in parent_claim_ids:
+        if parent not in claim_temp_ids:
+            errors.append(
+                f"proposition.parent_claim_id '{parent}' 未在 claim 节点中找到"
+            )
 
     if errors:
         logger.warning("Graph extraction validation produced %d warning(s): %s", len(errors), "; ".join(errors))
