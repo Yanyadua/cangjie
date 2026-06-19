@@ -121,7 +121,9 @@ class DraftGraphResponse(BaseModel):
 
 
 class DraftGraphUpdateRequest(BaseModel):
-    graph_json: GraphData
+    # 透传原始 dict，保留 draft 阶段的 snake_case + temp_id 格式，
+    # 避免 GraphData 校验破坏下游 graph_patch / clustering 对字段名的依赖。
+    graph_json: dict
 
 
 # ── Insertion Proposal ──
