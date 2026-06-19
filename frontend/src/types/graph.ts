@@ -13,7 +13,9 @@ export type NodeType =
   | 'technology'
   | 'question'
   | 'chunk'
-  | 'partition';
+  | 'partition'
+  | 'proposition'
+  | 'section';
 
 export type RelationType =
   | 'tag'
@@ -226,12 +228,14 @@ export const NODE_COLORS: Record<string, string> = {
   question: '#a855f7',
   chunk: '#94a3b8',
   partition: '#6366f1',
+  proposition: '#d946ef',
+  section: '#cbd5e1',
 };
 
 export const NODE_TYPES: NodeType[] = [
   'article', 'concept', 'claim', 'topic', 'person', 'organization',
   'paper', 'project', 'framework', 'tool', 'method', 'technology', 'question',
-  'partition',
+  'partition', 'proposition', 'section',
 ];
 
 export const RELATION_TYPES: RelationType[] = [
