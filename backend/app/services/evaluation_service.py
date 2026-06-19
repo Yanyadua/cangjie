@@ -19,16 +19,25 @@ STRATEGIES: dict[str, dict[str, Any]] = {
         "label": "简洁",
         "temperature": 0.1,
         "extra_instruction": "只提取文章最核心的主题和主张，忽略次要实体。目标 5-8 个节点。",
+        "mode": "standard",
     },
     "standard": {
         "label": "标准",
         "temperature": 0.3,
         "extra_instruction": "",
+        "mode": "standard",
     },
     "detailed": {
         "label": "详细",
         "temperature": 0.6,
         "extra_instruction": "尽可能详细展开，包括次要概念、具体工具和方法。目标 15-25 个节点。",
+        "mode": "standard",
+    },
+    "proposition": {
+        "label": "命题化",
+        "temperature": 0.3,
+        "extra_instruction": "",
+        "mode": "proposition",
     },
 }
 
@@ -102,7 +111,9 @@ class EvaluationService:
             title, content, temperature=temp, extra_instruction=extra,
         )
         expanded = await self.extractor.run_expand(
-            title, content, skeleton, temperature=temp, extra_instruction=extra,
+            title, content, skeleton,
+            temperature=temp, extra_instruction=extra,
+            mode=strategy.get("mode", "standard"),
         )
 
         # 校验清洗（复用现有逻辑）
