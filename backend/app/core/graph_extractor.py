@@ -169,23 +169,29 @@ _FEWSHOT_PROPOSITION_OUTPUT = json.dumps({
         {"temp_id": "n2", "node_type": "topic", "name": "检索增强生成", "description": "文章核心主题"},
         {"temp_id": "n3", "node_type": "claim", "name": "GraphRAG 在全局理解任务上优于传统 RAG", "description": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG"},
         {"temp_id": "p1", "node_type": "proposition", "name": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG",
-         "description": "GraphRAG 在需要跨文档推理或全局理解的数据集（如 MultiHop-RAG）上显著优于传统 RAG 方法，能生成更全面的回答（论文实验部分）",
+         "description": "GraphRAG 在需要跨文档推理或全局理解的数据集（如 MultiHop-RAG）上显著优于传统 RAG 方法（论文实验部分）",
          "parent_claim_id": "n3",
          "metadata": {"data_points": ["显著优于"], "conditions": ["全局理解任务"], "citations": ["实验部分"]}},
         {"temp_id": "p2", "node_type": "proposition", "name": "传统 RAG 在跨文档推理时表现不佳",
          "description": "传统 RAG 系统通过向量相似度检索文档片段，在需要跨文档推理或全局理解时存在局限，无法整合多文档信息",
-         "parent_claim_id": "n3"},
+         "parent_claim_id": "n3",
+         "metadata": {"data_points": [], "conditions": ["跨文档推理任务"], "citations": []}},
         {"temp_id": "p3", "node_type": "proposition", "name": "GraphRAG 在 MultiHop-RAG 上 F1=0.73",
          "description": "在 MultiHop-RAG 数据集（含 2023 年新闻的多跳推理问题）上，GraphRAG 的 F1 达到 0.73，比传统 RAG 高 15 个百分点（论文表3）",
          "parent_claim_id": "n3",
-         "metadata": {"data_points": ["F1=0.73", "+15pp"], "conditions": ["MultiHop-RAG dataset"], "citations": ["表3"]}}
+         "metadata": {"data_points": ["F1=0.73", "+15pp"], "conditions": ["MultiHop-RAG dataset"], "citations": ["表3"]}},
+        {"temp_id": "p4", "node_type": "proposition", "name": "GraphRAG 索引阶段计算成本高于传统 RAG",
+         "description": "GraphRAG 的索引阶段需要构建知识图谱并运行社区检测，相比传统 RAG 的纯向量索引有更高的前期计算成本，但查询时收益明显",
+         "parent_claim_id": "n3",
+         "metadata": {"data_points": [], "conditions": ["索引阶段"], "citations": []}}
     ],
     "edges": [
         {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "tag", "confidence": 0.95, "evidence": "文章围绕检索增强生成展开"},
         {"temp_id": "e2", "source": "n1", "target": "n3", "relation_type": "contains", "confidence": 1.0, "evidence": "文章核心观点"},
-        {"temp_id": "e3", "source": "p1", "target": "n3", "relation_type": "evidence_for", "confidence": 0.9, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG"},
-        {"temp_id": "e4", "source": "p2", "target": "n3", "relation_type": "supports", "confidence": 0.85, "evidence": "传统 RAG 在跨文档推理时表现不佳"},
-        {"temp_id": "e5", "source": "p3", "target": "n3", "relation_type": "evidence_for", "confidence": 0.95, "evidence": "MultiHop-RAG 上 F1=0.73"}
+        {"temp_id": "e3", "source": "p1", "target": "n3", "relation_type": "evidence_for", "confidence": 0.9, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "e4", "source": "p2", "target": "n3", "relation_type": "supports", "confidence": 0.85, "evidence": "传统 RAG 通过向量相似度检索文档片段，但在需要跨文档推理或全局理解时表现不佳"},
+        {"temp_id": "e5", "source": "p3", "target": "n3", "relation_type": "evidence_for", "confidence": 0.95, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "e6", "source": "p2", "target": "p1", "relation_type": "causes", "confidence": 0.85, "evidence": "传统 RAG 在跨文档推理时表现不佳，这促使 GraphRAG 提出图增强方案（prop↔prop 推理链，非原文直引）"}
     ]
 }, ensure_ascii=False, indent=2)
 
@@ -254,7 +260,7 @@ _EXPAND_PROPOSITION_SYSTEM = (
     "反例（标签化）：「GraphRAG F1 很高」（缺数据集和具体值）\n\n"
     "展开规则：\n"
     "1. 保留骨架中的 article、topic、claim 节点\n"
-    "2. 围绕每个 claim 节点展开 3-7 个 proposition 节点，capture 该 claim 的所有细节、数据、对比、条件\n"
+    "2. 围绕每个 claim 节点展开 3-7 个 proposition 节点，覆盖该 claim 的所有细节、数据、对比、条件\n"
     "3. 每个 proposition 必须有 parent_claim_id 指向所属 claim 的 temp_id\n"
     "4. proposition 的 description 必须是完整的自包含事实陈述，≥30 字\n"
     "5. 如果原文有具体数据，必须包含在 description 和 metadata.data_points 中\n"
@@ -268,11 +274,14 @@ _EXPAND_PROPOSITION_SYSTEM = (
     + _RELATION_GUIDANCE +
     "\n节点类型只能使用：\n"
     "article, concept, claim, topic, person, organization, paper, project, "
-    "framework, tool, method, technology, question, proposition, section\n\n"
+    "framework, tool, method, technology, question, proposition, section\n"
+    "（section 仅在多级章节明显的文章使用，作为 claim 的分组容器；普通文章不要建 section 节点）\n\n"
     "输出 JSON 格式：\n"
     "{\n"
     '  "nodes": [\n'
-    '    {"temp_id": "n1", "node_type": "类型", "name": "名称", "description": "描述",\n'
+    '    {"temp_id": "n1", "node_type": "类型", "name": "名称", "description": "描述"},\n'
+    '    // 仅 proposition 节点需要 parent_claim_id 和 metadata 字段：\n'
+    '    {"temp_id": "p1", "node_type": "proposition", "name": "...", "description": "...",\n'
     '     "parent_claim_id": "n3", "metadata": {"data_points": [...], "conditions": [...], "citations": [...]}}\n'
     "  ],\n"
     '  "edges": [\n'
