@@ -11,6 +11,7 @@ NODE_TYPES = [
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology", "question", "chunk",
     "partition",
+    "proposition", "section",
 ]
 
 RELATION_TYPES = [

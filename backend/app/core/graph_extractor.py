@@ -28,6 +28,8 @@ VALID_NODE_TYPES = frozenset({
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology", "question",
     "partition",
+    "proposition",  # 自包含原子事实（Dense X Retrieval）
+    "section",      # 章节分组容器（弱化使用，仅多级章节文章）
 })
 
 VALID_RELATION_TYPES = frozenset({
