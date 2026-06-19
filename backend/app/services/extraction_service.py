@@ -100,7 +100,7 @@ class ExtractionService:
         await self.db.commit()
         return str(dg.id)
 
-    async def run_step2(self, document_id: str) -> dict:
+    async def run_step2(self, document_id: str, mode: str = "standard") -> dict:
         content_tuple = await self._get_doc_content(document_id)
         if not content_tuple:
             return {"error": "Document not found"}
@@ -111,13 +111,13 @@ class ExtractionService:
             return {"error": "Step 1 not completed. Run step1 first."}
 
         skeleton = session["graph_json"]["skeleton"]
-        result = await self.extractor.run_expand(title, content, skeleton)
+        result = await self.extractor.run_expand(title, content, skeleton, mode=mode)
 
         dg_id = await self._save_expanded(session["id"], result)
-        return {"session_id": dg_id, "step": 2, "data": result}
+        return {"session_id": dg_id, "step": 2, "mode": mode, "data": result}
 
     async def run_step2_stream(
-        self, document_id: str
+        self, document_id: str, mode: str = "standard"
     ) -> AsyncGenerator[tuple[str, object], None]:
         """Stream step2 expand, yielding (event, payload) tuples.
 
@@ -138,12 +138,12 @@ class ExtractionService:
         session_id = session["id"]
 
         async for event, data in self.extractor.run_expand_stream(
-            title, content, skeleton
+            title, content, skeleton, mode=mode
         ):
             if event == "done":
                 try:
                     dg_id = await self._save_expanded(session_id, data)
-                    yield ("done", {"session_id": dg_id, "step": 2, "data": data})
+                    yield ("done", {"session_id": dg_id, "step": 2, "mode": mode, "data": data})
                 except Exception as exc:
                     await self.db.rollback()
                     yield ("error", str(exc))
