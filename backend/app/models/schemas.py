@@ -2,7 +2,14 @@ from __future__ import annotations
 from typing import Optional, Any
 from uuid import UUID
 from datetime import datetime
+from enum import Enum
 from pydantic import BaseModel, Field
+
+
+class ExtractionMode(str, Enum):
+    """抽取模式：standard 为当前默认，proposition 为命题化实验模式。"""
+    STANDARD = "standard"
+    PROPOSITION = "proposition"
 
 
 # ── Node / Edge / Graph ──
