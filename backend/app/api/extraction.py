@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
+from ..models.schemas import ExtractionMode
 from ..services.extraction_service import ExtractionService
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,11 @@ async def save_step1(document_id: str, data: dict, db: AsyncSession = Depends(ge
 @router.post("/extraction/{document_id}/step2")
 async def run_step2(
     document_id: str,
-    mode: str = "standard",
+    mode: ExtractionMode = ExtractionMode.STANDARD,
     db: AsyncSession = Depends(get_db),
 ):
     svc = ExtractionService(db)
-    result = await svc.run_step2(document_id, mode=mode)
+    result = await svc.run_step2(document_id, mode=mode.value)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
@@ -53,7 +54,7 @@ async def run_step2(
 @router.get("/extraction/{document_id}/step2/stream")
 async def stream_step2(
     document_id: str,
-    mode: str = "standard",
+    mode: ExtractionMode = ExtractionMode.STANDARD,
     db: AsyncSession = Depends(get_db),
 ):
     """Stream step2 expand via SSE, saving the result when done."""
@@ -61,7 +62,7 @@ async def stream_step2(
 
     async def event_generator():
         try:
-            async for event, data in svc.run_step2_stream(document_id, mode=mode):
+            async for event, data in svc.run_step2_stream(document_id, mode=mode.value):
                 payload = {"type": event, "text": data} if event == "chunk" else {"type": event, "result": data} if event == "done" else {"type": "error", "message": data}
                 yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 if event == "error":

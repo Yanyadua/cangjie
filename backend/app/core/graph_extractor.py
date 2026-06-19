@@ -446,12 +446,13 @@ def _validate_and_sanitize(raw: dict) -> dict:
                 )
                 continue
             parent_claim_ids.add(parent)
-            proposition_counts[parent] = proposition_counts.get(parent, 0) + 1
-            if proposition_counts[parent] > 7:
+            current_count = proposition_counts.get(parent, 0)
+            if current_count >= 7:
                 errors.append(
                     f"nodes[{idx}] claim '{parent}' 下 proposition 已达 7 个上限，skipped"
                 )
                 continue
+            proposition_counts[parent] = current_count + 1
             clean_node["parent_claim_id"] = parent
 
             # 透传 metadata（data_points/conditions/citations）
