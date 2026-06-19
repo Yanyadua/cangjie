@@ -602,12 +602,21 @@ class GraphExtractor:
         self, title: str, content: str, skeleton: dict,
         temperature: float = 0.3,
         extra_instruction: str = "",
+        mode: str = "standard",
     ) -> dict:
-        """Step 2: Expand skeleton into full knowledge graph (nodes + edges)."""
-        logger.info("Expand: Expanding skeleton into full graph")
+        """Step 2: Expand skeleton into full knowledge graph (nodes + edges).
+
+        mode:
+          - "standard": 现状（topic + claim + 实体节点）
+          - "proposition": 命题化（claim 节点下展开 3-7 个自包含命题节点）
+        """
+        logger.info("Expand (mode=%s): Expanding skeleton into full graph", mode)
         expand_prompt = _build_expand_prompt(title, content, skeleton)
 
-        system = _EXPAND_SYSTEM
+        if mode == "proposition":
+            system = _EXPAND_PROPOSITION_SYSTEM
+        else:
+            system = _EXPAND_SYSTEM
         if extra_instruction:
             system = system + "\n\n额外要求：\n" + extra_instruction
 
@@ -631,7 +640,8 @@ class GraphExtractor:
         return expanded
 
     async def run_expand_stream(
-        self, title: str, content: str, skeleton: dict
+        self, title: str, content: str, skeleton: dict,
+        mode: str = "standard",
     ) -> AsyncGenerator[tuple[str, str], None]:
         """Stream expand step, yielding (event, data) tuples.
 
@@ -640,13 +650,15 @@ class GraphExtractor:
           - ("done", json)   — final parsed result
           - ("error", msg)   — on failure
         """
-        logger.info("Expand (stream): Expanding skeleton into full graph")
+        logger.info("Expand (stream, mode=%s): Expanding skeleton into full graph", mode)
         expand_prompt = _build_expand_prompt(title, content, skeleton)
+
+        system = _EXPAND_PROPOSITION_SYSTEM if mode == "proposition" else _EXPAND_SYSTEM
 
         accumulated: list[str] = []
         try:
             async for delta in self._llm.generate_stream(
-                prompt=expand_prompt, system=_EXPAND_SYSTEM
+                prompt=expand_prompt, system=system
             ):
                 accumulated.append(delta)
                 yield ("chunk", delta)
