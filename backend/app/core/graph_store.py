@@ -89,6 +89,7 @@ class GraphStore:
         description: Optional[str] = None,
         canonical_name: Optional[str] = None,
         source_document_id: Optional[UUID] = None,
+        parent_node_id: Optional[UUID] = None,
     ) -> UUID:
         node = Node(
             id=uuid4(),
@@ -97,6 +98,7 @@ class GraphStore:
             canonical_name=canonical_name,
             description=description,
             source_document_id=source_document_id,
+            parent_node_id=parent_node_id,
         )
         self.db.add(node)
         await self.db.flush()
@@ -369,6 +371,7 @@ class GraphStore:
             "canonical_name": node.canonical_name,
             "description": node.description,
             "source_document_id": str(node.source_document_id) if node.source_document_id else None,
+            "parent_node_id": str(node.parent_node_id) if node.parent_node_id else None,
             "status": node.status,
         }
 
