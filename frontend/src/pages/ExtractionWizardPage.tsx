@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   runStage1, saveStage1,
@@ -55,72 +55,87 @@ export default function ExtractionWizardPage() {
   const [edges, setEdges] = useState<EdgeItem[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  useEffect(() => {
-    // Auto-start stage 1
-    handleRunStage1();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const reqIdRef = useRef(0);
 
-  const handleRunStage1 = async () => {
+  // I1 + I2: Auto-start stage 1 inline with cancelled flag (no TDZ, no stale state)
+  useEffect(() => {
     if (!documentId) return;
+    let cancelled = false;
     setLoading(true);
     setError('');
-    try {
-      const res = await runStage1(documentId);
-      setSummary(res.data.summary || '');
-      setConcepts(res.data.core_concepts || []);
-      setStep(1);
-    } catch (e: unknown) {
-      setError(toErrorMessage(e) || '阶段1失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+    runStage1(documentId)
+      .then(res => {
+        if (cancelled) return;
+        setSummary(res.data.summary || '');
+        setConcepts(res.data.core_concepts || []);
+        setStep(1);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(toErrorMessage(e) || '阶段1失败');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [documentId]);
 
   const handleSaveStage1 = async () => {
     if (!documentId) return;
+    const myId = ++reqIdRef.current;
     setLoading(true);
     setError('');
     try {
       await saveStage1(documentId, { summary, core_concepts: concepts });
+      if (reqIdRef.current !== myId) return; // superseded
       const res = await runStage2(documentId);
+      if (reqIdRef.current !== myId) return; // superseded
       setNodes(res.data.nodes || []);
       setStep(2);
     } catch (e: unknown) {
+      if (reqIdRef.current !== myId) return;
       setError(toErrorMessage(e) || '阶段2失败');
     } finally {
-      setLoading(false);
+      if (reqIdRef.current === myId) setLoading(false);
     }
   };
 
   const handleSaveStage2 = async () => {
     if (!documentId) return;
+    const myId = ++reqIdRef.current;
     setLoading(true);
     setError('');
     try {
       await saveStage2(documentId, { nodes });
+      if (reqIdRef.current !== myId) return; // superseded
       const res = await runStage3(documentId);
+      if (reqIdRef.current !== myId) return; // superseded
       setEdges(res.data.edges || []);
       setStep(3);
     } catch (e: unknown) {
+      if (reqIdRef.current !== myId) return;
       setError(toErrorMessage(e) || '阶段3失败');
     } finally {
-      setLoading(false);
+      if (reqIdRef.current === myId) setLoading(false);
     }
   };
 
   const handleFinalize = async () => {
     if (!documentId) return;
+    const myId = ++reqIdRef.current;
     setLoading(true);
     setError('');
     try {
       await saveStage3(documentId, { edges });
+      if (reqIdRef.current !== myId) return; // superseded
       const res = await finalizeExtraction(documentId);
+      if (reqIdRef.current !== myId) return; // superseded
       navigate(`/draft/${res.draft_graph_id}`);
     } catch (e: unknown) {
+      if (reqIdRef.current !== myId) return;
       setError(toErrorMessage(e) || '完成失败');
     } finally {
-      setLoading(false);
+      if (reqIdRef.current === myId) setLoading(false);
       setConfirmOpen(false);
     }
   };
@@ -137,13 +152,17 @@ export default function ExtractionWizardPage() {
     setNodes(prev => prev.map((n, i) => i === idx ? { ...n, [field]: value } : n));
   };
   const addNode = () => {
-    const id = `n_${Date.now()}`;
+    const id = `n_${crypto.randomUUID()}`;
     setNodes(prev => [...prev, { temp_id: id, node_type: 'concept' as NodeType, name: '', description: '' }]);
   };
   const removeNode = (idx: number) => {
-    const removedId = nodes[idx].temp_id;
-    setNodes(prev => prev.filter((_, i) => i !== idx));
-    setEdges(prev => prev.filter(e => e.source !== removedId && e.target !== removedId));
+    setNodes(prev => {
+      const removed = prev[idx];
+      if (!removed) return prev;
+      const removedId = removed.temp_id;
+      setEdges(edges => edges.filter(e => e.source !== removedId && e.target !== removedId));
+      return prev.filter((_, i) => i !== idx);
+    });
   };
 
   // ── Edge helpers ──
@@ -151,7 +170,7 @@ export default function ExtractionWizardPage() {
     setEdges(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
   const addEdge = () => {
-    const id = `e_${Date.now()}`;
+    const id = `e_${crypto.randomUUID()}`;
     setEdges(prev => [...prev, {
       temp_id: id, source: nodes[0]?.temp_id || '', target: nodes[1]?.temp_id || '',
       relation_type: 'related_to' as RelationType, confidence: 0.8, evidence: '',
@@ -418,6 +437,7 @@ export default function ExtractionWizardPage() {
                       value={e.confidence}
                       onChange={ev => updateEdge(idx, 'confidence', parseFloat(ev.target.value))}
                       className="w-16 text-center"
+                      aria-label="置信度"
                     />
                     <Button
                       variant="ghost"
@@ -432,6 +452,7 @@ export default function ExtractionWizardPage() {
                     value={e.evidence}
                     onChange={ev => updateEdge(idx, 'evidence', ev.target.value)}
                     placeholder="证据（引用原文）"
+                    aria-label="证据"
                   />
                 </CardContent>
               </Card>

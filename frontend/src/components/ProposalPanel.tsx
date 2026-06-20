@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { InsertionProposalJSON } from '../types/graph';
 
+const NEW_BADGE_CLASS = 'bg-teal-500/15 text-teal-700 dark:text-teal-300';
+const MERGE_BADGE_CLASS = 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+
 export type ProposalPanelProps = {
   proposal: InsertionProposalJSON;
   onApply: () => void;
@@ -46,17 +49,17 @@ export default function ProposalPanel({ proposal, onApply, loading }: ProposalPa
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {positions.length > 0 && (
-              <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+              <Badge variant="secondary" className={NEW_BADGE_CLASS}>
                 候选位置 {positions.length}
               </Badge>
             )}
             {merges.length > 0 && (
-              <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              <Badge variant="secondary" className={MERGE_BADGE_CLASS}>
                 建议合并 {merges.length}
               </Badge>
             )}
             {edges.length > 0 && (
-              <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+              <Badge variant="secondary" className={NEW_BADGE_CLASS}>
                 建议关系 {edges.length}
               </Badge>
             )}
@@ -76,7 +79,7 @@ export default function ProposalPanel({ proposal, onApply, loading }: ProposalPa
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <span>{pos.target_node_name}</span>
-                  <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                  <Badge variant="secondary" className={NEW_BADGE_CLASS}>
                     new
                   </Badge>
                 </CardTitle>
@@ -101,7 +104,7 @@ export default function ProposalPanel({ proposal, onApply, loading }: ProposalPa
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <span>{merge.draft_node_temp_id} &rarr; {merge.existing_node_id}</span>
-                  <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                  <Badge variant="secondary" className={MERGE_BADGE_CLASS}>
                     merge
                   </Badge>
                 </CardTitle>
@@ -126,7 +129,7 @@ export default function ProposalPanel({ proposal, onApply, loading }: ProposalPa
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <span>{edge.source} &mdash;[{edge.relation_type}]&rarr; {edge.target}</span>
-                  <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                  <Badge variant="secondary" className={NEW_BADGE_CLASS}>
                     new
                   </Badge>
                 </CardTitle>

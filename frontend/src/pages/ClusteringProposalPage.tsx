@@ -26,6 +26,9 @@ import {
 } from '@/components/ui/dialog';
 import { toErrorMessage } from '../lib/errors';
 
+const NEW_BADGE_CLASS = 'bg-teal-500/15 text-teal-700 dark:text-teal-300';
+const MERGE_BADGE_CLASS = 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+
 export default function ClusteringProposalPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -38,20 +41,39 @@ export default function ClusteringProposalPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     getClusteringProposal(id)
       .then((res) => {
+        if (cancelled) return;
         setProposal(res.proposal_json);
         setEditedActions(res.proposal_json.tag_actions || []);
       })
-      .catch((e: unknown) => setError(toErrorMessage(e)))
-      .finally(() => setLoading(false));
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(toErrorMessage(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [id]);
 
   const toggleAction = (idx: number) => {
     setEditedActions(prev => prev.map((a, i) => {
       if (i !== idx) return a;
       if (a.action === 'MERGE') {
-        return { ...a, action: 'NEW' as const, target_topic_id: undefined, temp_id: `t_${Date.now()}` };
+        return { ...a, action: 'NEW' as const, target_topic_id: undefined, temp_id: `t_${crypto.randomUUID()}` };
+      }
+      if (a.action === 'NEW') {
+        // Reverse transition: merge into the first matched candidate (default)
+        const firstCandidate = a.matched_candidates?.[0];
+        if (!firstCandidate) return a; // no-op if somehow no candidates
+        return {
+          ...a,
+          action: 'MERGE' as const,
+          target_topic_id: firstCandidate.id,
+          temp_id: undefined,
+        };
       }
       return a;
     }));
@@ -70,6 +92,9 @@ export default function ClusteringProposalPage() {
     setProposal(prev => prev ? { ...prev, topic_edges: prev.topic_edges.filter((_, i) => i !== idx) } : prev);
   };
 
+  // I5: Split state — `proposal` holds topic_edges + metadata (editable via setProposal),
+  // while `editedActions` holds tag_actions (editable separately via setEditedActions).
+  // On apply, we merge editedActions back into the proposal before sending.
   const handleApply = async () => {
     if (!id || !proposal) return;
     setApplying(true);
@@ -139,12 +164,12 @@ export default function ClusteringProposalPage() {
         <CardContent>
           <div className="flex flex-wrap gap-2">
             {mergeCount > 0 && (
-              <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              <Badge variant="secondary" className={MERGE_BADGE_CLASS}>
                 合并到已有 {mergeCount}
               </Badge>
             )}
             {newCount > 0 && (
-              <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+              <Badge variant="secondary" className={NEW_BADGE_CLASS}>
                 新建主题 {newCount}
               </Badge>
             )}
@@ -169,11 +194,11 @@ export default function ClusteringProposalPage() {
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-sm font-semibold">{action.tag_name}</CardTitle>
                   {action.action === 'MERGE' ? (
-                    <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                    <Badge variant="secondary" className={MERGE_BADGE_CLASS}>
                       合并到已有
                     </Badge>
                   ) : (
-                    <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                    <Badge variant="secondary" className={NEW_BADGE_CLASS}>
                       新建主题
                     </Badge>
                   )}
@@ -229,6 +254,7 @@ export default function ClusteringProposalPage() {
                     value={action.proposed_description || ''}
                     onChange={e => updateActionField(idx, 'proposed_description', e.target.value)}
                     placeholder="输入新主题描述..."
+                    aria-label="新主题描述"
                   />
                   {action.matched_candidates?.length > 0 && (
                     <Button

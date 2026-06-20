@@ -28,10 +28,18 @@ export default function InsertionProposalPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     getInsertionProposal(id)
-      .then((res) => setProposal(res.proposal_json))
-      .catch((e: unknown) => setError(toErrorMessage(e)))
-      .finally(() => setLoading(false));
+      .then((res) => {
+        if (!cancelled) setProposal(res.proposal_json);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(toErrorMessage(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [id]);
 
   const handleApply = async () => {
@@ -99,10 +107,10 @@ export default function InsertionProposalPage() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={applying}>
-              拒绝
+              取消
             </Button>
             <Button onClick={handleApply} disabled={applying}>
-              {applying ? '正在应用...' : '接受'}
+              {applying ? '正在应用...' : '确认应用'}
             </Button>
           </DialogFooter>
         </DialogContent>
