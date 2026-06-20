@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDraftGraph, updateDraftGraph, confirmDraftGraph } from '../api/client';
 import { toErrorMessage } from '../lib/errors';
+import { graphJsonToGraphData } from '../lib/graph-mappers';
 import GraphEditor from '../components/GraphEditor';
 import NodeInspector from '../components/NodeInspector';
 import EdgeInspector from '../components/EdgeInspector';
 import { Button } from '../components/ui/button';
+import { Alert, AlertDescription } from '../components/ui/alert';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import {
   Sheet,
@@ -23,33 +25,25 @@ export default function DraftGraphPage() {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState('');
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     getDraftGraph(id)
       .then((res) => {
-        const gj = res.graph_json;
-        setGraphData({
-          nodes: (gj.nodes || []).map((n: any) => ({
-            id: n.temp_id || n.id,
-            nodeType: n.node_type,
-            name: n.name,
-            description: n.description,
-          })),
-          edges: (gj.edges || []).map((e: any) => ({
-            id: e.temp_id || e.id,
-            source: e.source,
-            target: e.target,
-            relationType: e.relation_type,
-            confidence: e.confidence,
-            evidence: e.evidence,
-          })),
-        });
+        if (cancelled) return;
+        setGraphData(graphJsonToGraphData(res.graph_json));
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch((e: unknown) => {
+        if (!cancelled) setError(toErrorMessage(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [id]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -99,8 +93,9 @@ export default function DraftGraphPage() {
   const handleConfirm = async () => {
     if (!id) return;
     setConfirming(true);
+    setError('');
     try {
-      const toSave: any = {
+      const toSave = {
         nodes: graphData.nodes.map((n) => ({
           temp_id: n.id,
           node_type: n.nodeType,
@@ -118,15 +113,15 @@ export default function DraftGraphPage() {
           evidence: e.evidence,
         })),
       };
-      await updateDraftGraph(id, toSave as GraphData);
+      await updateDraftGraph(id, toSave as unknown as GraphData);
       const result = await confirmDraftGraph(id);
       if (result.proposal_id) {
         navigate(`/clustering/${result.proposal_id}`);
       } else {
-        alert('图谱已确认，但生成插入建议失败: ' + (result.error || '未知错误'));
+        setError('图谱已确认，但生成插入建议失败: ' + (result.error || '未知错误'));
       }
-    } catch (e: any) {
-      alert('确认失败: ' + toErrorMessage(e));
+    } catch (e: unknown) {
+      setError('确认失败: ' + toErrorMessage(e));
     } finally {
       setConfirming(false);
     }
@@ -160,6 +155,15 @@ export default function DraftGraphPage() {
           onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
         />
+
+        {/* Error banner — floating top-left over canvas */}
+        {error && (
+          <div className="absolute left-4 right-4 top-4">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
+        )}
 
         {/* Confirm button — floating bottom-right over canvas */}
         <div className="absolute bottom-4 right-4">
