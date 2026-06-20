@@ -1,87 +1,148 @@
-import React, { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Send } from 'lucide-react';
 import { askQuestion } from '../api/client';
+import { EmptyState } from '../components/EmptyState';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+type Evidence = { source: string; text: string; document_title?: string };
+
+type Turn = {
+  id: string;
+  question: string;
+  answer: string;
+  evidence: Evidence[];
+  error?: boolean;
+};
 
 export default function AskPage() {
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [evidence, setEvidence] = useState<Array<{ source: string; text: string; document_title?: string }>>([]);
+  const navigate = useNavigate();
+  const [draft, setDraft] = useState('');
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleAsk = async () => {
-    if (!question.trim()) return;
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [turns, loading]);
+
+  const send = async () => {
+    const q = draft.trim();
+    if (!q || loading) return;
     setLoading(true);
+    setError('');
+    setDraft('');
     try {
-      const res = await askQuestion(question);
-      setAnswer(res.answer);
-      setEvidence(res.evidence || []);
+      const res = await askQuestion(q);
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}`,
+          question: q,
+          answer: res.answer,
+          evidence: res.evidence || [],
+        },
+      ]);
     } catch (e: any) {
-      setAnswer('回答生成失败: ' + (e?.message || '未知错误'));
-      setEvidence([]);
+      const msg = '回答生成失败: ' + (e?.message || '未知错误');
+      setError(msg);
+      setTurns((prev) => [
+        ...prev,
+        { id: `${Date.now()}`, question: q, answer: msg, evidence: [], error: true },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-      <h2 style={{ marginBottom: 20 }}>知识问答</h2>
+    <div className="mx-auto flex h-[calc(100vh-56px)] max-w-[880px] flex-col">
+      {/* Conversation scroll area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5">
+        {turns.length === 0 && !loading && (
+          <EmptyState title="向知识库提问" hint="在下方输入框输入问题，按 Enter 发送。" />
+        )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="输入你的问题..."
-          onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-          style={{ flex: 1, padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14 }}
-        />
-        <button
-          onClick={handleAsk}
-          disabled={loading}
-          style={{
-            padding: '8px 16px',
-            background: '#3b82f6',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {loading ? '思考中...' : '提问'}
-        </button>
-      </div>
-
-      {answer && (
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, marginBottom: 8 }}>回答</h3>
-          <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {answer}
-          </div>
-        </div>
-      )}
-
-      {evidence.length > 0 && (
-        <div>
-          <h3 style={{ fontSize: 15, marginBottom: 8 }}>证据来源</h3>
-          {evidence.map((ev, i) => (
-            <div
-              key={i}
-              style={{
-                padding: 10,
-                marginBottom: 6,
-                background: '#f0f9ff',
-                borderRadius: 6,
-                borderLeft: '3px solid #3b82f6',
-                fontSize: 13,
-              }}
-            >
-              <div style={{ color: '#475569' }}>{ev.text}</div>
-              {ev.document_title && (
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>来自: {ev.document_title}</div>
-              )}
+        <div className="flex flex-col gap-3">
+          {turns.map((t) => (
+            <div key={t.id} className="flex flex-col gap-2">
+              {/* User bubble */}
+              <div className="flex justify-end">
+                <div className="max-w-[80%] self-end rounded-xl bg-accent-soft px-3 py-2 text-sm text-text">
+                  {t.question}
+                </div>
+              </div>
+              {/* AI bubble */}
+              <div className="flex justify-start">
+                <div className="max-w-[85%] self-start rounded-xl bg-surface px-3 py-2 text-sm leading-relaxed text-text shadow-sm">
+                  <div className="whitespace-pre-wrap">{t.answer}</div>
+                  {t.evidence.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5 border-t border-border pt-2">
+                      {t.evidence.map((ev, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => navigate('/graph')}
+                          title={ev.text}
+                          className="inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border border-transparent bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        >
+                          {ev.document_title || ev.source || '来源'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="flex max-w-[85%] flex-col gap-1.5 self-start rounded-xl bg-surface px-3 py-3 shadow-sm">
+                <div className="h-3 w-48 animate-pulse rounded bg-surface-2" />
+                <div className="h-3 w-64 animate-pulse rounded bg-surface-2" />
+                <div className="h-3 w-40 animate-pulse rounded bg-surface-2" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {error && !loading && (
+        <div className="px-6">
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         </div>
       )}
+
+      {/* Bottom input bar */}
+      <div className="border-t border-border bg-surface px-6 py-3">
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="向知识库提问... (Enter 发送，Shift+Enter 换行)"
+            rows={1}
+            className="min-h-[40px] flex-1 resize-none"
+          />
+          <Button onClick={send} disabled={loading || !draft.trim()} className="shrink-0">
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            发送
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
