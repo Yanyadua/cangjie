@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import GraphEditor from '../components/GraphEditor';
-import { getGlobalGraph, getLocalGraph, getNodeDetail } from '../api/client';
+import { getGlobalGraph, getLocalGraph, getArticleSubgraph } from '../api/client';
 import type { GraphNode, GraphEdge } from '../types/graph';
 import { NODE_COLORS } from '../types/graph';
 
@@ -51,21 +51,15 @@ export default function GlobalGraphPage() {
 
     if (node.nodeType === 'article') {
       try {
-        const detail = await getNodeDetail(nodeId);
-        if (detail.source_document_id) {
-          const dgRes = await fetch(`/api/documents/${detail.source_document_id}/draft-graph`).then(r => r.json());
-          if (dgRes?.graph_json) {
-            const gj = dgRes.graph_json;
-            const nodes: GraphNode[] = (gj.nodes || []).map((n: any) => ({
-              id: n.temp_id || n.id, nodeType: n.node_type, name: n.name, description: n.description,
-            }));
-            const edges: GraphEdge[] = (gj.edges || []).map((e: any) => ({
-              id: e.temp_id || e.id, source: e.source, target: e.target,
-              relationType: e.relation_type, confidence: e.confidence,
-            }));
-            setArticleGraph({ nodes, edges });
-          }
-        }
+        const data = await getArticleSubgraph(nodeId);
+        const nodes: GraphNode[] = (data.nodes || []).map((n: any) => ({
+          id: n.id, nodeType: n.node_type, name: n.name, description: n.description,
+        }));
+        const edges: GraphEdge[] = (data.edges || []).map((e: any) => ({
+          id: e.id, source: e.source, target: e.target,
+          relationType: e.relation_type, confidence: e.confidence,
+        }));
+        setArticleGraph({ nodes, edges });
       } catch { /* ignore */ }
     } else {
       try {
@@ -149,7 +143,7 @@ export default function GlobalGraphPage() {
             )}
             {articleGraph && (
               <div style={{ marginTop: 12 }}>
-                <h4 style={{ fontSize: 13, margin: '0 0 8px 0', color: '#64748b' }}>文章内部图谱</h4>
+                <h4 style={{ fontSize: 13, margin: '0 0 8px 0', color: '#64748b' }}>文章知识子图（claim + proposition）</h4>
                 <div style={{ height: 300, border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
                   <GraphEditor graphData={articleGraph} editable={false} />
                 </div>
