@@ -38,7 +38,7 @@ export default function ExtractionWizardPage() {
   // Step 2: Expanded data
   const [nodes, setNodes] = useState<NodeItem[]>([]);
   const [edges, setEdges] = useState<EdgeItem[]>([]);
-  const [extractionMode, setExtractionMode] = useState<'standard' | 'proposition'>('standard');
+  const [extractionMode, setExtractionMode] = useState<'standard' | 'proposition'>('proposition');
 
   useEffect(() => {
     handleRunStep1();
@@ -262,17 +262,21 @@ export default function ExtractionWizardPage() {
           ))}
 
           {/* 抽取模式切换 */}
-          <div style={{ marginTop: 20, padding: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#92400e' }}>抽取模式（实验性）</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}>
-                <input type="radio" checked={extractionMode === 'standard'} onChange={() => setExtractionMode('standard')} />
-                标准（默认，topic + claim + 实体）
-              </label>
+          <div style={{ marginBottom: 12, padding: 12, background: '#fffbeb', borderRadius: 6, border: '1px solid #fde68a' }}>
+            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#92400e' }}>抽取模式</div>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}>
                 <input type="radio" checked={extractionMode === 'proposition'} onChange={() => setExtractionMode('proposition')} />
-                命题化（每个 claim 展开为 3-7 个自包含命题，还原度更高但节点更多）
+                命题化（推荐 · 每个 claim 展开 2-5 个自包含命题，还原度更高）
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" checked={extractionMode === 'standard'} onChange={() => setExtractionMode('standard')} />
+                标准（topic + claim + 实体，适合抽象理论文）
+              </label>
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+              💡 命题化在新闻/综述/工程类文章上 F1 提升 20-50%；
+              高度抽象的理论文（纯数学/纯概念关系）建议用标准模式。
             </div>
           </div>
 
