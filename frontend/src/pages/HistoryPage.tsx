@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { getDocuments } from '../api/client';
@@ -9,7 +9,9 @@ import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { graphJsonToGraphData } from '../lib/graph-mappers';
 import type { GraphNode, GraphEdge } from '../types/graph';
 
 type DocItem = {
@@ -48,6 +50,7 @@ export default function HistoryPage() {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [tab, setTab] = useState<TabKey>('all');
   const [filter, setFilter] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DocItem | null>(null);
@@ -55,12 +58,29 @@ export default function HistoryPage() {
   const [graphStatus, setGraphStatus] = useState<string>('');
   const [graphLoading, setGraphLoading] = useState(false);
 
-  useEffect(() => {
+  const loadDocs = useCallback(() => {
+    setLoading(true);
+    setLoadError('');
+    let active = true;
     getDocuments(0, 100)
-      .then((res: any) => setDocuments(res.documents || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .then((res: { documents?: DocItem[] }) => {
+        if (!active) return;
+        setDocuments(res.documents || []);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setLoadError(err instanceof Error ? err.message : '加载失败');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const cleanup = loadDocs();
+    return cleanup;
+  }, [loadDocs]);
 
   const handleSelectDoc = async (doc: DocItem) => {
     setSelectedDoc(doc);
@@ -68,40 +88,21 @@ export default function HistoryPage() {
     setGraphStatus('加载中...');
     setGraphLoading(true);
 
-    // Preserve original fallback chain: try /draft-graphs?document_id=, then
-    // /documents/:id/draft-graph. Only the second one is actually consumed.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
-      const dgRes = await fetch(`/api/draft-graphs?document_id=${doc.id}`);
-      if (!dgRes.ok) throw new Error('not found');
-    } catch {
-      // fallback below
-    }
-
-    try {
-      const res = await fetch(`/api/documents/${doc.id}/draft-graph`);
-      if (!res.ok) throw new Error('not found');
+      const res = await fetch(`/api/documents/${doc.id}/draft-graph`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const dg = await res.json();
-      const gj = dg.graph_json;
-      const nodes: GraphNode[] = (gj.nodes || []).map((n: any) => ({
-        id: n.temp_id || n.id,
-        nodeType: n.node_type,
-        name: n.name,
-        description: n.description,
-      }));
-      const edges: GraphEdge[] = (gj.edges || []).map((e: any) => ({
-        id: e.temp_id || e.id,
-        source: e.source,
-        target: e.target,
-        relationType: e.relation_type,
-        confidence: e.confidence,
-        evidence: e.evidence,
-      }));
+      const { nodes, edges } = graphJsonToGraphData(dg.graph_json);
       setGraphData({ nodes, edges });
       setGraphStatus(dg.status);
-    } catch {
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
       setGraphData({ nodes: [], edges: [] });
       setGraphStatus('未找到图谱');
     } finally {
+      clearTimeout(timeout);
       setGraphLoading(false);
     }
   };
@@ -127,6 +128,21 @@ export default function HistoryPage() {
     return (
       <div className="p-6">
         <LoadingSkeleton count={6} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>加载失败：{loadError}</span>
+            <Button variant="outline" size="sm" onClick={loadDocs}>
+              重试
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

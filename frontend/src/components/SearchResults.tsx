@@ -36,10 +36,15 @@ export default function SearchResults({ results }: SearchResultsProps) {
               className="rounded-xl border border-border bg-surface p-3 shadow-sm"
             >
               <p className="text-sm text-text">
-                <mark className="rounded bg-accent-soft px-0.5 text-accent">
-                  {chunk.content.slice(0, 200)}
-                </mark>
-                ...
+                {chunk.content.length > 200 ? (
+                  <mark className="rounded bg-accent-soft px-0.5 text-accent">
+                    {Array.from(chunk.content).slice(0, 200).join('')}…
+                  </mark>
+                ) : (
+                  <mark className="rounded bg-accent-soft px-0.5 text-accent">
+                    {chunk.content}
+                  </mark>
+                )}
               </p>
               <div className="mt-1.5 text-[11px] text-text-subtle">
                 匹配度: {((chunk.score || 0) * 100).toFixed(0)}%

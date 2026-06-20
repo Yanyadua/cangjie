@@ -6,6 +6,7 @@ import { EmptyState } from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toErrorMessage } from '../lib/errors';
 
 type Evidence = { source: string; text: string; document_title?: string };
 
@@ -46,8 +47,8 @@ export default function AskPage() {
           evidence: res.evidence || [],
         },
       ]);
-    } catch (e: any) {
-      const msg = '回答生成失败: ' + (e?.message || '未知错误');
+    } catch (e: unknown) {
+      const msg = '回答生成失败: ' + toErrorMessage(e);
       setError(msg);
       setTurns((prev) => [
         ...prev,
@@ -90,10 +91,11 @@ export default function AskPage() {
                     <div className="mt-2 flex flex-wrap gap-1.5 border-t border-border pt-2">
                       {t.evidence.map((ev, i) => (
                         <button
-                          key={i}
+                          key={`${ev.source}-${i}`}
                           type="button"
                           onClick={() => navigate('/graph')}
                           title={ev.text}
+                          aria-label={`查看来源：${ev.document_title || ev.source}`}
                           className="inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border border-transparent bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                         >
                           {ev.document_title || ev.source || '来源'}

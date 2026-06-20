@@ -7,6 +7,7 @@ import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toErrorMessage } from '../lib/errors';
 import type { SearchResult } from '../types/graph';
 
 export default function SearchPage() {
@@ -27,8 +28,8 @@ export default function SearchPage() {
         : await graphEnhancedSearch(query);
       setResults(res);
       setHasSearched(true);
-    } catch (e: any) {
-      setError('搜索失败: ' + (e?.message || '未知错误'));
+    } catch (e: unknown) {
+      setError('搜索失败: ' + toErrorMessage(e));
       setHasSearched(true);
     } finally {
       setLoading(false);
