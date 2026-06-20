@@ -9,6 +9,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<Item[]>([]);
+
+  useEffect(() => {
+    if (!open) setQ('');
+  }, [open]);
+
   const close = () => onOpenChange(false);
 
   useEffect(() => {
