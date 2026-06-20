@@ -93,3 +93,24 @@ async def merge_nodes(
     except Exception as e:
         logger.error(f"Merge nodes failed: {e}")
         raise HTTPException(status_code=500, detail="合并失败")
+
+
+@router.get("/graph/article/{article_id}")
+async def get_article_subgraph(
+    article_id: str,
+    include_proposition: bool = True,
+    db: AsyncSession = Depends(get_db),
+):
+    """返回某篇文章的 claim + proposition 子图（含内部边）。
+
+    用于全局宏观图点 article 节点后的下钻视图。
+    """
+    store = GraphStore(db)
+    try:
+        aid = UUID(article_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid article_id")
+    result = await store.get_article_subgraph(aid, include_proposition=include_proposition)
+    if not result:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return result
