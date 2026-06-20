@@ -3,19 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import GraphEditor from '../components/GraphEditor';
 import NodeInspector from '../components/NodeInspector';
 import { getGlobalGraph, getLocalGraph, getNodeDetail } from '../api/client';
+import { graphJsonToGraphData } from '../lib/graph-mappers';
+import { toErrorMessage } from '../lib/errors';
 import { nodeColorVar } from '@/lib/utils';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '../components/ui/sheet';
+import { Alert, AlertDescription } from '../components/ui/alert';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
-import type { GraphNode, GraphEdge } from '../types/graph';
+import type { GraphNode, GraphEdge, NodeType } from '../types/graph';
 
 type FilterType = 'all' | 'topic' | 'article';
 
-const LEGEND_TYPES: string[] = ['concept', 'topic', 'article', 'claim', 'question'];
+const LEGEND_TYPES: NodeType[] = ['concept', 'topic', 'article', 'claim', 'question'];
 
 export default function GlobalGraphPage() {
   const navigate = useNavigate();
@@ -25,27 +28,16 @@ export default function GlobalGraphPage() {
   const [articleGraph, setArticleGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const loadGlobalGraph = useCallback(async (ft: FilterType) => {
     setLoading(true);
+    setError('');
     try {
       const result = await getGlobalGraph(ft);
-      const nodes: GraphNode[] = (result.nodes || []).map((n: any) => ({
-        id: n.id,
-        nodeType: n.node_type,
-        name: n.name,
-        description: n.description,
-      }));
-      const edges: GraphEdge[] = (result.edges || []).map((e: any) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        relationType: e.relation_type,
-        confidence: e.confidence,
-      }));
-      setGraphData({ nodes, edges });
+      setGraphData(graphJsonToGraphData(result));
     } catch (e) {
-      console.error('Failed to load global graph', e);
+      setError(toErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -67,28 +59,14 @@ export default function GlobalGraphPage() {
         if (detail.source_document_id) {
           const dgRes = await fetch(`/api/documents/${detail.source_document_id}/draft-graph`).then(r => r.json());
           if (dgRes?.graph_json) {
-            const gj = dgRes.graph_json;
-            const nodes: GraphNode[] = (gj.nodes || []).map((n: any) => ({
-              id: n.temp_id || n.id, nodeType: n.node_type, name: n.name, description: n.description,
-            }));
-            const edges: GraphEdge[] = (gj.edges || []).map((e: any) => ({
-              id: e.temp_id || e.id, source: e.source, target: e.target,
-              relationType: e.relation_type, confidence: e.confidence,
-            }));
-            setArticleGraph({ nodes, edges });
+            setArticleGraph(graphJsonToGraphData(dgRes.graph_json));
           }
         }
       } catch { /* ignore */ }
     } else {
       try {
         const result = await getLocalGraph(nodeId, 1);
-        const nodes: GraphNode[] = (result.nodes || []).map((n: any) => ({
-          id: n.id, nodeType: n.node_type, name: n.name, description: n.description,
-        }));
-        const edges: GraphEdge[] = (result.edges || []).map((e: any) => ({
-          id: e.id, source: e.source, target: e.target, relationType: e.relation_type, confidence: e.confidence,
-        }));
-        setGraphData({ nodes, edges });
+        setGraphData(graphJsonToGraphData(result));
       } catch { /* ignore */ }
     }
   }, [graphData.nodes]);
@@ -96,21 +74,17 @@ export default function GlobalGraphPage() {
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setLoading(true);
+    setError('');
     try {
       const result = await getLocalGraph(searchQuery, 2);
       if (result.nodes?.length > 0) {
-        const nodes: GraphNode[] = (result.nodes || []).map((n: any) => ({
-          id: n.id, nodeType: n.node_type, name: n.name, description: n.description,
-        }));
-        const edges: GraphEdge[] = (result.edges || []).map((e: any) => ({
-          id: e.id, source: e.source, target: e.target, relationType: e.relation_type, confidence: e.confidence,
-        }));
-        setGraphData({ nodes, edges });
+        setGraphData(graphJsonToGraphData(result));
       } else {
+        setError('未找到节点：' + searchQuery);
         await loadGlobalGraph(filterType);
       }
-    } catch {
-      alert('未找到节点');
+    } catch (e) {
+      setError('未找到节点：' + searchQuery);
     } finally {
       setLoading(false);
     }
@@ -159,8 +133,24 @@ export default function GlobalGraphPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {isEmpty && (
+      {/* Error state (when no graph data loaded) */}
+      {error && isEmpty && !loading && (
+        <div className="flex h-full items-center justify-center pt-16">
+          <div className="w-full max-w-md p-6">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+            <div className="mt-4 flex justify-center">
+              <Button onClick={() => loadGlobalGraph(filterType)} variant="outline" size="sm">
+                重试
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state (only when no error) */}
+      {isEmpty && !error && !loading && (
         <div className="flex h-full items-center justify-center pt-16">
           <EmptyState
             title="知识库还是空的"
@@ -173,6 +163,15 @@ export default function GlobalGraphPage() {
       {!loading && !isEmpty && (
         <>
           <GraphEditor graphData={graphData} editable={false} onNodeClick={handleNodeClick} />
+
+          {/* Error banner — floating top-center over canvas (partial load) */}
+          {error && (
+            <div className="absolute left-1/2 top-16 z-20 w-full max-w-md -translate-x-1/2 px-4">
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            </div>
+          )}
 
           {/* Bottom-left legend */}
           <Card className="absolute bottom-4 left-4 z-10 gap-0 py-3 shadow-md">

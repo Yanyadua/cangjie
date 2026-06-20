@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
+import { SELECT_CLASSNAME } from '@/lib/utils';
 
 export type NodeInspectorProps = {
   node: GraphNode;
@@ -40,7 +41,7 @@ export default function NodeInspector({ node, editable = false, onUpdate, onDele
           <select
             value={node.nodeType}
             onChange={(e) => handleChange('nodeType', e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+            className={SELECT_CLASSNAME}
           >
             {NODE_TYPES.map((t) => (
               <option key={t} value={t}>{t}</option>
