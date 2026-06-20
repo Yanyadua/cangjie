@@ -1,7 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInsertionProposal, applyInsertionProposal } from '../api/client';
 import ProposalPanel from '../components/ProposalPanel';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { toErrorMessage } from '../lib/errors';
 import type { InsertionProposalJSON } from '../types/graph';
 
 export default function InsertionProposalPage() {
@@ -10,42 +23,90 @@ export default function InsertionProposalPage() {
   const [proposal, setProposal] = useState<InsertionProposalJSON | null>(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
+  const [error, setError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     getInsertionProposal(id)
       .then((res) => setProposal(res.proposal_json))
-      .catch(console.error)
+      .catch((e: unknown) => setError(toErrorMessage(e)))
       .finally(() => setLoading(false));
   }, [id]);
 
   const handleApply = async () => {
     if (!id) return;
     setApplying(true);
+    setError('');
     try {
       const result = await applyInsertionProposal(id);
       if (result.status === 'applied') {
         navigate('/graph');
       } else {
-        alert('应用失败: ' + JSON.stringify(result.errors || result.error));
+        setError('应用失败: ' + JSON.stringify(result.errors || result.error));
       }
-    } catch (e: any) {
-      alert('应用失败: ' + (e?.message || '未知错误'));
+    } catch (e: unknown) {
+      setError('应用失败: ' + toErrorMessage(e));
     } finally {
       setApplying(false);
+      setConfirmOpen(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
-  if (!proposal) return <div style={{ padding: 24 }}>未找到插入建议</div>;
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-[880px] p-6">
+        <LoadingSkeleton count={4} />
+      </div>
+    );
+  }
+
+  if (!proposal) {
+    return (
+      <div className="mx-auto max-w-[880px] p-6">
+        <EmptyState title="未找到插入建议" hint="该建议可能已被处理或链接有误" />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-      <h2 style={{ marginBottom: 20 }}>插入建议</h2>
-      <p style={{ color: '#64748b', marginBottom: 16 }}>
+    <div className="mx-auto max-w-[880px] p-6">
+      <h2 className="mb-2 text-2xl font-bold text-text">插入建议</h2>
+      <p className="mb-5 text-sm text-text-muted">
         系统根据新文章内容，在全局知识库中找到了以下连接建议。请检查后确认。
       </p>
-      <ProposalPanel proposal={proposal} onApply={handleApply} loading={applying} />
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <ProposalPanel
+        proposal={proposal}
+        onApply={() => setConfirmOpen(true)}
+        loading={applying}
+      />
+
+      {/* Confirmation dialog (replaces window.confirm) */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认应用插入建议</DialogTitle>
+            <DialogDescription>
+              应用后将对全局知识图谱执行写入操作，此操作不可撤销。是否继续？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={applying}>
+              拒绝
+            </Button>
+            <Button onClick={handleApply} disabled={applying}>
+              {applying ? '正在应用...' : '接受'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
