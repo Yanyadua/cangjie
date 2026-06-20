@@ -114,6 +114,13 @@ export default function ClusteringProposalPage() {
       await updateClusteringProposal(id, updated);
       const result = await applyClusteringProposal(id);
       if (result.status === 'applied') {
+        const counts = result.knowledge_nodes_created || {};
+        const summary = Object.entries(counts)
+          .map(([type, n]) => `${type}: ${n}`)
+          .join('，');
+        alert(
+          `应用成功\n\n入库统计：\n${summary || '无知识节点'}\n知识边：${result.knowledge_edges_created || 0}`
+        );
         navigate('/graph');
       } else {
         alert('应用失败: ' + JSON.stringify(result.errors || result.error));

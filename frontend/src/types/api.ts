@@ -25,6 +25,12 @@ export type ApplyResponse = {
   operations_count?: number;
   errors?: string[];
   error?: string;
+  // Phase 2 fields (returned by apply_proposal)
+  article_node_id?: string;
+  applied?: string[];
+  failed?: string[];
+  knowledge_nodes_created?: Record<string, number>;
+  knowledge_edges_created?: number;
 };
 
 export type AskRequest = {
