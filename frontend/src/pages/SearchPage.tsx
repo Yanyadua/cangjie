@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { semanticSearch, graphEnhancedSearch } from '../api/client';
 import SearchResults from '../components/SearchResults';
+import { EmptyState } from '../components/EmptyState';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { SearchResult } from '../types/graph';
 
 export default function SearchPage() {
@@ -8,84 +14,78 @@ export default function SearchPage() {
   const [mode, setMode] = useState<'semantic' | 'graph'>('semantic');
   const [results, setResults] = useState<SearchResult>({ chunks: [], nodes: [], documents: [] });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
     setLoading(true);
+    setError('');
     try {
       const res = mode === 'semantic'
         ? await semanticSearch(query)
         : await graphEnhancedSearch(query);
       setResults(res);
+      setHasSearched(true);
     } catch (e: any) {
-      alert('搜索失败: ' + (e?.message || '未知错误'));
+      setError('搜索失败: ' + (e?.message || '未知错误'));
+      setHasSearched(true);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-      <h2 style={{ marginBottom: 20 }}>知识搜索</h2>
+  const hasResults =
+    results.chunks.length > 0 || results.nodes.length > 0 || results.documents.length > 0;
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input
+  return (
+    <div className="mx-auto max-w-[880px] p-6">
+      <h2 className="mb-5 text-2xl font-bold text-text">知识搜索</h2>
+
+      <div className="mb-3 flex gap-2">
+        <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="输入问题或关键词..."
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          style={{ flex: 1, padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14 }}
+          className="flex-1"
         />
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          style={{
-            padding: '8px 16px',
-            background: '#3b82f6',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
+        <Button onClick={handleSearch} disabled={loading} className="shrink-0">
+          {loading && <Loader2 className="size-4 animate-spin" />}
           {loading ? '搜索中...' : '搜索'}
-        </button>
+        </Button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button
+      <div className="mb-4 flex gap-2">
+        <Button
+          variant={mode === 'semantic' ? 'default' : 'outline'}
+          size="sm"
           onClick={() => setMode('semantic')}
-          style={{
-            padding: '4px 12px',
-            border: '1px solid',
-            borderColor: mode === 'semantic' ? '#3b82f6' : '#e2e8f0',
-            background: mode === 'semantic' ? '#eff6ff' : '#fff',
-            borderRadius: 4,
-            cursor: 'pointer',
-            fontSize: 13,
-          }}
         >
           语义搜索
-        </button>
-        <button
+        </Button>
+        <Button
+          variant={mode === 'graph' ? 'default' : 'outline'}
+          size="sm"
           onClick={() => setMode('graph')}
-          style={{
-            padding: '4px 12px',
-            border: '1px solid',
-            borderColor: mode === 'graph' ? '#3b82f6' : '#e2e8f0',
-            background: mode === 'graph' ? '#eff6ff' : '#fff',
-            borderRadius: 4,
-            cursor: 'pointer',
-            fontSize: 13,
-          }}
         >
           图谱增强搜索
-        </button>
+        </Button>
       </div>
 
-      {(results.chunks.length > 0 || results.nodes.length > 0 || results.documents.length > 0) && (
-        <SearchResults results={results} />
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
+
+      {loading && <LoadingSkeleton />}
+
+      {!loading && !error && hasSearched && !hasResults && (
+        <EmptyState title="暂无结果" hint="换个关键词试试" />
+      )}
+
+      {!loading && !error && hasResults && <SearchResults results={results} />}
     </div>
   );
 }
