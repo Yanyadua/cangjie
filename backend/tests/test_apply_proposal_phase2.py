@@ -118,3 +118,56 @@ async def test_apply_proposal_standard_mode_backward_compat(db_session):
     )).scalars().all()
     assert len(claims) == 1
     assert result["knowledge_nodes_created"]["claim"] == 1
+
+
+async def test_apply_proposal_nested_draft_format(db_session):
+    """Regression: draft_graph 新版嵌套结构（{step, skeleton, expanded}）也能正确入库。"""
+    doc_id = await _make_doc(db_session, "Nested Doc")
+    # 新版结构：step1+step2 产出的格式
+    draft_graph = {
+        "step": 2,
+        "skeleton": {
+            "summary": "nested test",
+            "topic_tags": [{"name": "t1"}],
+            "core_claims": [],
+        },
+        "expanded": {
+            "nodes": [
+                {"temp_id": "c1", "node_type": "claim",
+                 "name": "claim 1", "description": "d1"},
+                {"temp_id": "p1", "node_type": "proposition",
+                 "name": "prop 1", "description": "self-contained fact",
+                 "parent_claim_id": "c1"},
+            ],
+            "edges": [
+                {"temp_id": "e1", "source": "p1", "target": "c1",
+                 "relation_type": "evidence_for", "confidence": 0.9, "evidence": "原文"},
+            ],
+        },
+    }
+    prop_id = await _make_proposal_with_draft(db_session, doc_id, draft_graph)
+
+    svc = ClusteringService(db_session)
+    result = await svc.apply_proposal(prop_id)
+
+    # claim + proposition 都应该入库
+    claims = (await db_session.execute(
+        select(Node).where(
+            Node.source_document_id == doc_id,
+            Node.node_type == "claim",
+        )
+    )).scalars().all()
+    propositions = (await db_session.execute(
+        select(Node).where(
+            Node.source_document_id == doc_id,
+            Node.node_type == "proposition",
+        )
+    )).scalars().all()
+    assert len(claims) == 1
+    assert len(propositions) == 1
+    # proposition 的 parent_node_id 指向 claim
+    assert propositions[0].parent_node_id == claims[0].id
+    # 返回统计正确
+    assert result["knowledge_nodes_created"]["claim"] == 1
+    assert result["knowledge_nodes_created"]["proposition"] == 1
+    assert result["knowledge_edges_created"] == 1  # 1 knowledge edge (p1->c1)

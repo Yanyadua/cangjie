@@ -293,9 +293,17 @@ class ClusteringService:
             draft = dg_result.scalar_one_or_none()
             if draft:
                 draft_graph = draft.graph_json
+                # 兼容两种 draft_graph 结构：
+                # - 新版（step1/step2）: {step, skeleton, expanded: {nodes, edges}}
+                # - 旧版/扁平: {nodes, edges, summary}
+                if "expanded" in draft_graph and isinstance(draft_graph["expanded"], dict):
+                    raw_nodes = draft_graph["expanded"].get("nodes", [])
+                    raw_edges = draft_graph["expanded"].get("edges", [])
+                else:
+                    raw_nodes = draft_graph.get("nodes", [])
+                    raw_edges = draft_graph.get("edges", [])
                 temp_to_uuid: dict = {}
 
-                raw_nodes = draft_graph.get("nodes", [])
                 skip_types = {"topic", "article"}  # 这些上游已处理
 
                 # Pass 1: 非 proposition 节点（claim/concept/method/...）
@@ -350,7 +358,7 @@ class ClusteringService:
                         failed.append(f"Proposition '{temp_id}': {e}")
 
                 # Pass 3: 知识边（两端都是知识节点）
-                for e in draft_graph.get("edges", []):
+                for e in raw_edges:
                     src_temp = e.get("source")
                     tgt_temp = e.get("target")
                     src_uuid = temp_to_uuid.get(src_temp)
