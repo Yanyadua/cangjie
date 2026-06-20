@@ -138,7 +138,7 @@ export async function saveStep2(documentId: string, data: unknown) {
 export async function streamStep2(
   documentId: string,
   onChunk: (text: string) => void,
-  mode: 'standard' | 'proposition' = 'standard',
+  mode: 'standard' | 'proposition' = 'proposition',
 ): Promise<{ session_id: string; step: number; mode: string; data: { nodes: unknown[]; edges: unknown[] } }> {
   const url = mode === 'proposition'
     ? `/api/extraction/${documentId}/step2/stream?mode=proposition`
@@ -275,4 +275,37 @@ export async function mergeNodes(sourceId: string, targetId: string) {
 export async function runEvaluation(documentId: string, strategies: string[] = ['concise', 'standard', 'detailed']) {
   const res = await api.post('/evaluation/run', { document_id: documentId, strategies });
   return res.data;
+}
+
+// ── Phase 2: 文章子图下钻 ──
+
+export async function getArticleSubgraph(
+  articleId: string,
+  includeProposition = true,
+): Promise<{
+  article_id: string;
+  document_id: string;
+  nodes: Array<{
+    id: string;
+    node_type: string;
+    name: string;
+    description: string | null;
+    parent_node_id: string | null;
+    source_document_id: string | null;
+    status: string;
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    relation_type: string;
+    confidence: number;
+    evidence_text: string | null;
+    status: string;
+  }>;
+}> {
+  const url = `/api/graph/article/${articleId}?include_proposition=${includeProposition}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
