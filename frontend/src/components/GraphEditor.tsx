@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { GraphNode, GraphEdge } from '../types/graph';
-import { NODE_COLORS } from '../types/graph';
+import { nodeColorVar } from '@/lib/utils';
 
 // ── Force-directed layout ──
 
@@ -127,25 +127,20 @@ type CustomNodeData = {
   onSelect?: () => void;
 };
 
-function CustomNode({ data }: NodeProps<Node<CustomNodeData>>) {
-  const color = NODE_COLORS[data.nodeType] || '#94a3b8';
+function CustomNode({ data, selected }: NodeProps<Node<CustomNodeData>>) {
+  const color = nodeColorVar(data.nodeType);
   return (
     <div
-      style={{
-        padding: '8px 14px',
-        borderRadius: 8,
-        border: `2px solid ${color}`,
-        background: '#fff',
-        fontSize: 13,
-        minWidth: 100,
-        maxWidth: 200,
-        cursor: 'pointer',
-      }}
       onClick={data.onSelect}
+      className="min-w-[120px] max-w-[200px] rounded-xl border bg-surface p-2 shadow-sm"
+      style={{ borderColor: selected ? color : 'var(--border)' }}
     >
       <Handle type="target" position={Position.Top} style={{ background: color }} />
-      <div style={{ fontWeight: 600, marginBottom: 2 }}>{data.label}</div>
-      <div style={{ fontSize: 10, color }}>{data.nodeType}</div>
+      <div className="flex items-center gap-1.5">
+        <span className="h-3 w-1 rounded-full" style={{ background: color }} />
+        <span className="text-[10px] uppercase tracking-wide text-text-muted">{data.nodeType}</span>
+      </div>
+      <div className="text-[13px] font-semibold text-text">{data.label}</div>
       <Handle type="source" position={Position.Bottom} style={{ background: color }} />
     </div>
   );
@@ -174,7 +169,7 @@ function graphEdgeToFlowEdge(ge: GraphEdge): Edge {
     source: ge.source,
     target: ge.target,
     label: ge.relationType,
-    style: { stroke: '#94a3b8' },
+    style: { stroke: 'var(--text-subtle)' },
   };
 }
 
@@ -251,7 +246,7 @@ export default function GraphEditor({
   );
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div className="h-full w-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -263,7 +258,7 @@ export default function GraphEditor({
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
-        style={{ background: '#f8fafc' }}
+        colorMode="system"
       >
         <Controls />
         <MiniMap />

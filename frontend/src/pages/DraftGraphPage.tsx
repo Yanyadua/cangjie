@@ -1,9 +1,20 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDraftGraph, updateDraftGraph, confirmDraftGraph } from '../api/client';
+import { toErrorMessage } from '../lib/errors';
 import GraphEditor from '../components/GraphEditor';
 import NodeInspector from '../components/NodeInspector';
 import EdgeInspector from '../components/EdgeInspector';
+import { Button } from '../components/ui/button';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from '../components/ui/sheet';
 import type { GraphNode, GraphEdge, GraphData } from '../types/graph';
 
 export default function DraftGraphPage() {
@@ -89,7 +100,6 @@ export default function DraftGraphPage() {
     if (!id) return;
     setConfirming(true);
     try {
-      // Save current graph first
       const toSave: any = {
         nodes: graphData.nodes.map((n) => ({
           temp_id: n.id,
@@ -116,18 +126,33 @@ export default function DraftGraphPage() {
         alert('图谱已确认，但生成插入建议失败: ' + (result.error || '未知错误'));
       }
     } catch (e: any) {
-      alert('确认失败: ' + (e?.message || '未知错误'));
+      alert('确认失败: ' + toErrorMessage(e));
     } finally {
       setConfirming(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
+  const sheetOpen = selectedNode !== null || selectedEdge !== null;
+
+  const handleSheetOpenChange = (open: boolean) => {
+    if (!open) {
+      setSelectedNode(null);
+      setSelectedEdge(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <LoadingSkeleton count={3} />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
-      {/* Graph area */}
-      <div style={{ flex: 1 }}>
+    <div className="flex h-[calc(100vh-56px)] flex-col">
+      {/* Full-bleed canvas */}
+      <div className="relative flex-1">
         <GraphEditor
           graphData={graphData}
           onChange={() => {}}
@@ -135,50 +160,57 @@ export default function DraftGraphPage() {
           onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
         />
-      </div>
 
-      {/* Right panel */}
-      <div style={{ width: 320, borderLeft: '1px solid #e2e8f0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 1 }}>
-          {selectedNode && (
-            <NodeInspector
-              node={selectedNode}
-              editable
-              onUpdate={handleNodeUpdate}
-              onDelete={handleNodeDelete}
-            />
-          )}
-          {selectedEdge && (
-            <EdgeInspector
-              edge={selectedEdge}
-              editable
-              onUpdate={handleEdgeUpdate}
-              onDelete={handleEdgeDelete}
-            />
-          )}
-          {!selectedNode && !selectedEdge && (
-            <div style={{ padding: 16, color: '#94a3b8' }}>点击节点或边查看详情</div>
-          )}
-        </div>
-        <div style={{ padding: 12, borderTop: '1px solid #e2e8f0' }}>
-          <button
+        {/* Confirm button — floating bottom-right over canvas */}
+        <div className="absolute bottom-4 right-4">
+          <Button
             onClick={handleConfirm}
             disabled={confirming}
-            style={{
-              width: '100%',
-              padding: '10px',
-              background: confirming ? '#94a3b8' : '#10b981',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              cursor: confirming ? 'not-allowed' : 'pointer',
-              fontWeight: 600,
-            }}
+            className="shadow-lg"
           >
             {confirming ? '确认中...' : '确认图谱'}
-          </button>
+          </Button>
         </div>
       </div>
+
+      {/* Sheet inspector */}
+      <Sheet open={sheetOpen} onOpenChange={handleSheetOpenChange}>
+        <SheetContent side="right">
+          {selectedNode && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedNode.name}</SheetTitle>
+                <SheetDescription>节点详情 — {selectedNode.nodeType}</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto">
+                <NodeInspector
+                  node={selectedNode}
+                  editable
+                  onUpdate={handleNodeUpdate}
+                  onDelete={handleNodeDelete}
+                />
+              </div>
+            </>
+          )}
+          {selectedEdge && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedEdge.relationType}</SheetTitle>
+                <SheetDescription>关系详情</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto">
+                <EdgeInspector
+                  edge={selectedEdge}
+                  editable
+                  onUpdate={handleEdgeUpdate}
+                  onDelete={handleEdgeDelete}
+                />
+              </div>
+            </>
+          )}
+          <SheetFooter />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
