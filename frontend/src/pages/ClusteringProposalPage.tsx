@@ -1,7 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getClusteringProposal, updateClusteringProposal, applyClusteringProposal } from '../api/client';
 import type { TagAction, ClusteringProposalJSON } from '../types/graph';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toErrorMessage } from '../lib/errors';
 
 export default function ClusteringProposalPage() {
   const { id } = useParams<{ id: string }>();
@@ -10,15 +33,17 @@ export default function ClusteringProposalPage() {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [editedActions, setEditedActions] = useState<TagAction[]>([]);
+  const [error, setError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     getClusteringProposal(id)
       .then((res) => {
         setProposal(res.proposal_json);
-        setEditedActions(res.proposal_json.tag_actions);
+        setEditedActions(res.proposal_json.tag_actions || []);
       })
-      .catch(console.error)
+      .catch((e: unknown) => setError(toErrorMessage(e)))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -48,6 +73,7 @@ export default function ClusteringProposalPage() {
   const handleApply = async () => {
     if (!id || !proposal) return;
     setApplying(true);
+    setError('');
     try {
       const updated = { ...proposal, tag_actions: editedActions };
       await updateClusteringProposal(id, updated);
@@ -55,157 +81,234 @@ export default function ClusteringProposalPage() {
       if (result.status === 'applied') {
         navigate('/graph');
       } else {
-        alert('应用失败: ' + JSON.stringify(result.errors || result.error));
+        setError('应用失败: ' + JSON.stringify(result.errors || result.error));
       }
-    } catch (e: any) {
-      alert('应用失败: ' + (e?.message || '未知错误'));
+    } catch (e: unknown) {
+      setError('应用失败: ' + toErrorMessage(e));
     } finally {
       setApplying(false);
+      setConfirmOpen(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
-  if (!proposal) return <div style={{ padding: 24 }}>未找到聚类提案</div>;
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-[880px] p-6">
+        <LoadingSkeleton count={4} />
+      </div>
+    );
+  }
+
+  if (!proposal) {
+    return (
+      <div className="mx-auto max-w-[880px] p-6">
+        <EmptyState title="未找到聚类提案" hint="该提案可能已被处理或链接有误" />
+      </div>
+    );
+  }
+
+  const mergeCount = editedActions.filter(a => a.action === 'MERGE').length;
+  const newCount = editedActions.filter(a => a.action === 'NEW').length;
+  const totalActions = editedActions.length;
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: 24 }}>
+    <div className="mx-auto max-w-[880px] p-6">
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: '0 0 8px 0' }}>主题聚类提案</h2>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#1e293b' }}>{proposal.article_title}</div>
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{proposal.article_summary}</div>
+      <div className="mb-5">
+        <h2 className="mb-1 text-2xl font-bold text-text">主题聚类提案</h2>
+        <div className="text-sm font-semibold text-text">{proposal.article_title}</div>
+        {proposal.article_summary && (
+          <div className="mt-1 text-sm text-text-muted">{proposal.article_summary}</div>
+        )}
       </div>
 
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Summary card */}
+      <Card className="mb-5">
+        <CardHeader>
+          <CardTitle className="text-base">聚类概览</CardTitle>
+          <CardDescription>
+            共 {totalActions} 个标签聚类建议
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {mergeCount > 0 && (
+              <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                合并到已有 {mergeCount}
+              </Badge>
+            )}
+            {newCount > 0 && (
+              <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                新建主题 {newCount}
+              </Badge>
+            )}
+          </div>
+          {totalActions > 0 && (
+            <div className="mt-3">
+              <Progress value={(newCount / totalActions) * 100} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Tag Actions */}
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ fontSize: 15, margin: '0 0 12px 0' }}>
+      <div className="mb-6 flex flex-col gap-3">
+        <h3 className="text-base font-semibold text-text">
           标签聚类 ({editedActions.length})
         </h3>
         {editedActions.map((action, idx) => (
-          <div
-            key={idx}
-            style={{
-              padding: 14,
-              marginBottom: 8,
-              background: action.action === 'MERGE' ? '#f0f9ff' : '#fefce8',
-              borderRadius: 8,
-              borderLeft: action.action === 'MERGE' ? '3px solid #3b82f6' : '3px solid #f59e0b',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 15 }}>{action.tag_name}</span>
-                <span style={{
-                  fontSize: 11, padding: '2px 6px', borderRadius: 4,
-                  background: action.action === 'MERGE' ? '#dbeafe' : '#fef3c7',
-                  color: action.action === 'MERGE' ? '#1d4ed8' : '#92400e',
-                }}>
-                  {action.action === 'MERGE' ? '合并到已有' : '新建主题'}
-                </span>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                  置信度 {(action.confidence * 100).toFixed(0)}%
-                </span>
-              </div>
-              <button
-                onClick={() => removeAction(idx)}
-                style={{ padding: '2px 8px', background: '#fef2f2', border: 'none', borderRadius: 4, color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
-              >
-                删除
-              </button>
-            </div>
-
-            {action.reason && (
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>{action.reason}</div>
-            )}
-
-            {/* Matched candidates for MERGE actions */}
-            {action.action === 'MERGE' && action.matched_candidates?.length > 0 && (
-              <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>匹配到的已有主题:</div>
-                {action.matched_candidates.map((c, ci) => (
-                  <div key={ci} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '4px 8px', marginBottom: 2, background: '#fff', borderRadius: 4, fontSize: 12,
-                  }}>
-                    <span>{c.name}</span>
-                    <span style={{ color: '#94a3b8' }}>相似度 {(c.similarity * 100).toFixed(0)}%</span>
-                  </div>
-                ))}
-                <button
-                  onClick={() => toggleAction(idx)}
-                  style={{ marginTop: 4, padding: '2px 8px', border: '1px solid #f59e0b', background: '#fff', borderRadius: 4, color: '#f59e0b', cursor: 'pointer', fontSize: 11 }}
+          <Card key={`action-${idx}`}>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-semibold">{action.tag_name}</CardTitle>
+                  {action.action === 'MERGE' ? (
+                    <Badge variant="secondary" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                      合并到已有
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                      新建主题
+                    </Badge>
+                  )}
+                  <span className="text-xs text-text-subtle">
+                    置信度 {(action.confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => removeAction(idx)}
                 >
-                  改为新建主题
-                </button>
+                  删除
+                </Button>
               </div>
-            )}
+            </CardHeader>
+            <CardContent>
+              {action.reason && (
+                <p className="mb-2 text-sm text-text-muted">{action.reason}</p>
+              )}
 
-            {/* Editable fields for NEW actions */}
-            {action.action === 'NEW' && (
-              <div style={{ marginTop: 6 }}>
-                <input
-                  value={action.proposed_description || ''}
-                  onChange={e => updateActionField(idx, 'proposed_description', e.target.value)}
-                  placeholder="输入新主题描述..."
-                  style={{ width: '100%', padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12 }}
-                />
-                {action.matched_candidates?.length > 0 && (
-                  <button
+              {/* Matched candidates for MERGE actions — cluster container */}
+              {action.action === 'MERGE' && action.matched_candidates?.length > 0 && (
+                <div className="mt-2">
+                  <div className="mb-2 text-xs text-text-muted">匹配到的已有主题:</div>
+                  <div className="rounded-lg border border-dashed border-border p-2">
+                    {action.matched_candidates.map((c, ci) => (
+                      <div
+                        key={`cand-${idx}-${ci}`}
+                        className="flex items-center justify-between rounded-md bg-surface-2 px-2 py-1 text-xs"
+                      >
+                        <span className="font-medium text-text">{c.name}</span>
+                        <span className="text-text-subtle">相似度 {(c.similarity * 100).toFixed(0)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="mt-2 text-amber-600"
                     onClick={() => toggleAction(idx)}
-                    style={{ marginTop: 4, padding: '2px 8px', border: '1px solid #3b82f6', background: '#fff', borderRadius: 4, color: '#3b82f6', cursor: 'pointer', fontSize: 11 }}
                   >
-                    改为合并到已有
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+                    改为新建主题
+                  </Button>
+                </div>
+              )}
+
+              {/* Editable fields for NEW actions */}
+              {action.action === 'NEW' && (
+                <div className="mt-2">
+                  <Input
+                    value={action.proposed_description || ''}
+                    onChange={e => updateActionField(idx, 'proposed_description', e.target.value)}
+                    placeholder="输入新主题描述..."
+                  />
+                  {action.matched_candidates?.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="mt-2"
+                      onClick={() => toggleAction(idx)}
+                    >
+                      改为合并到已有
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* Topic Edges */}
       {proposal.topic_edges?.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <h3 style={{ fontSize: 15, margin: '0 0 12px 0' }}>
+        <div className="mb-6 flex flex-col gap-3">
+          <h3 className="text-base font-semibold text-text">
             主题间关系 ({proposal.topic_edges.length})
           </h3>
           {proposal.topic_edges.map((edge, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: 8, marginBottom: 4,
-                background: '#f8fafc', borderRadius: 6, fontSize: 13,
-              }}
-            >
-              <span style={{ fontWeight: 500 }}>{edge.source_tag}</span>
-              <span style={{ color: '#3b82f6' }}>[{edge.relation_type}]</span>
-              <span style={{ fontWeight: 500 }}>{edge.target_tag}</span>
-              <span style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>{edge.reason}</span>
-              <button
-                onClick={() => removeTopicEdge(idx)}
-                style={{ padding: '2px 8px', background: '#fef2f2', border: 'none', borderRadius: 4, color: '#dc2626', cursor: 'pointer', fontSize: 11 }}
-              >
-                删除
-              </button>
-            </div>
+            <Card key={`edge-${idx}`}>
+              <CardContent className="flex flex-wrap items-center gap-2 py-3">
+                <Badge variant="outline" className="font-medium">
+                  {edge.source_tag}
+                </Badge>
+                <Badge variant="secondary" className="bg-primary/15 text-primary">
+                  {edge.relation_type}
+                </Badge>
+                <Badge variant="outline" className="font-medium">
+                  {edge.target_tag}
+                </Badge>
+                <span className="flex-1 text-xs text-text-muted">{edge.reason}</span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => removeTopicEdge(idx)}
+                >
+                  删除
+                </Button>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Apply button */}
-      <button
-        onClick={handleApply}
+      <Button
+        onClick={() => setConfirmOpen(true)}
         disabled={applying}
-        style={{
-          width: '100%', padding: '12px',
-          background: applying ? '#94a3b8' : '#3b82f6',
-          color: '#fff', border: 'none', borderRadius: 8,
-          cursor: applying ? 'not-allowed' : 'pointer',
-          fontSize: 15, fontWeight: 600,
-        }}
+        size="lg"
+        className="w-full"
       >
         {applying ? '正在写入全局图谱...' : '确认并写入全局图谱'}
-      </button>
+      </Button>
+
+      {/* Confirmation dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认写入全局图谱</DialogTitle>
+            <DialogDescription>
+              将聚类结果写入全局知识图谱，此操作不可撤销。是否继续？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={applying}>
+              取消
+            </Button>
+            <Button onClick={handleApply} disabled={applying}>
+              {applying ? '正在写入...' : '确认'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
