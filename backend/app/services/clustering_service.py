@@ -40,18 +40,42 @@ class ClusteringService:
         if not doc:
             return {"error": "Document not found"}
 
+        # ── Normalize draft_graph 结构 ──
+        # 兼容两种存储格式：
+        # - 嵌套（step1/step2 产出）: {step, skeleton:{summary, topic_tags, core_claims}, expanded:{nodes, edges}}
+        # - 扁平（旧版 finalize）: {summary, topic_tags, nodes, edges}
+        skeleton = draft_graph_json.get("skeleton", {})
+        expanded = draft_graph_json.get("expanded", {})
+        normalized = {
+            "summary": (
+                draft_graph_json.get("summary")
+                or skeleton.get("summary")
+                or ""
+            ),
+            "topic_tags": (
+                draft_graph_json.get("topic_tags")
+                or skeleton.get("topic_tags")
+                or []
+            ),
+            "nodes": (
+                draft_graph_json.get("nodes")
+                or expanded.get("nodes")
+                or []
+            ),
+        }
+
         title = doc.title
-        summary = draft_graph_json.get("summary", doc.summary or "")
+        summary = normalized["summary"] or doc.summary or ""
 
         # Reuse topic_tags from extraction skeleton (no separate LLM call)
         tags = [
             {"name": t["name"], "confidence": t.get("confidence", 0.8)}
-            for t in draft_graph_json.get("topic_tags", [])
+            for t in normalized["topic_tags"]
         ]
 
         if not tags:
             # Fallback: extract topic-type nodes from the graph as tags
-            for node in draft_graph_json.get("nodes", []):
+            for node in normalized["nodes"]:
                 if node.get("node_type") == "topic":
                     tags.append({"name": node["name"], "confidence": 0.8})
 

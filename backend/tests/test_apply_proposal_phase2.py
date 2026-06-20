@@ -171,3 +171,106 @@ async def test_apply_proposal_nested_draft_format(db_session):
     assert result["knowledge_nodes_created"]["claim"] == 1
     assert result["knowledge_nodes_created"]["proposition"] == 1
     assert result["knowledge_edges_created"] == 1  # 1 knowledge edge (p1->c1)
+
+
+async def test_generate_proposal_nested_draft_format(db_session):
+    """Regression: generate_proposal 能处理嵌套 draft_graph 结构（{step, skeleton, expanded}）。
+
+    Phase 1 bug: generate_proposal 假设扁平结构，但 step1/step2 抽取后存的是嵌套结构，
+    导致 topic_tags 永远读不到，返回 "No topic tags found" 错误。
+    """
+    from app.services.clustering_service import ClusteringService
+    from app.models.db_models import Document
+
+    # 建一个 Document
+    doc = Document(
+        id=uuid4(), title="Nested Bug Repro",
+        raw_content="content", cleaned_content="content",
+        content_hash="hash_nested", status="active",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    # 嵌套结构的 draft_graph（实际 step1+step2 后的格式）
+    nested_graph = {
+        "step": 2,
+        "skeleton": {
+            "summary": "Nested format test summary",
+            "topic_tags": [
+                {"name": "Topic A", "confidence": 0.9},
+                {"name": "Topic B", "confidence": 0.8},
+            ],
+            "core_claims": [],
+        },
+        "expanded": {
+            "nodes": [
+                {"temp_id": "n1", "node_type": "topic", "name": "Topic A"},
+                {"temp_id": "n2", "node_type": "topic", "name": "Topic B"},
+            ],
+            "edges": [],
+        },
+    }
+
+    svc = ClusteringService(db_session)
+    # We can't actually call planner without LLM, so test the tag extraction
+    # directly by monkeypatching planner.generate_proposal to short-circuit
+    async def fake_partition_match(*args, **kwargs):
+        return {}
+    async def fake_planner_generate(*args, **kwargs):
+        return {
+            "article_title": kwargs.get("article_title", ""),
+            "article_summary": kwargs.get("article_summary", ""),
+            "document_id": str(kwargs.get("document_id", "")),
+            "tag_actions": [],
+            "topic_edges": [],
+        }
+    svc.planner.match_partition = fake_partition_match
+    svc.planner.generate_proposal = fake_planner_generate
+
+    # NOTE: 传 doc.id（UUID 对象）而非 str；SQLite UUID shim 需要 UUID 实例。
+    # 生产环境 generate_proposal 接受 str，asyncpg 会自动转换。
+    result = await svc.generate_proposal(doc.id, nested_graph)
+
+    # The bug: would return {"error": "No topic tags found..."}
+    assert "error" not in result, f"Expected success, got error: {result}"
+    assert "proposal_id" in result
+    assert result["proposal_json"]["article_summary"] == "Nested format test summary"
+
+
+async def test_generate_proposal_flat_draft_format_still_works(db_session):
+    """Backward compat: 扁平 draft_graph 格式仍能正常工作。"""
+    from app.services.clustering_service import ClusteringService
+    from app.models.db_models import Document
+
+    doc = Document(
+        id=uuid4(), title="Flat Format",
+        raw_content="content", cleaned_content="content",
+        content_hash="hash_flat", status="active",
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    flat_graph = {
+        "summary": "Flat summary",
+        "topic_tags": [{"name": "Flat Tag", "confidence": 0.9}],
+        "nodes": [{"node_type": "topic", "name": "Flat Tag"}],
+        "edges": [],
+    }
+
+    svc = ClusteringService(db_session)
+    async def fake_partition_match(*args, **kwargs):
+        return {}
+    async def fake_planner_generate(*args, **kwargs):
+        return {
+            "article_title": kwargs.get("article_title", ""),
+            "article_summary": kwargs.get("article_summary", ""),
+            "document_id": str(kwargs.get("document_id", "")),
+            "tag_actions": [],
+            "topic_edges": [],
+        }
+    svc.planner.match_partition = fake_partition_match
+    svc.planner.generate_proposal = fake_planner_generate
+
+    result = await svc.generate_proposal(doc.id, flat_graph)
+    assert "error" not in result
+    assert result["proposal_json"]["article_summary"] == "Flat summary"
