@@ -24,6 +24,24 @@
   --color-danger: var(--danger);
   --color-ring: var(--ring);
 
+  /* shadcn compatibility — map shadcn token names to our tokens */
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent-foreground: var(--accent-fg);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--accent-fg);
+  --color-input: var(--border);
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -52,6 +70,25 @@
   --warning: #e8a93b;
   --danger: #d26b5b;
   --ring: var(--accent);
+
+  /* shadcn compatibility — var() indirections resolve to our values above */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-fg);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-muted);
+  --accent-foreground: var(--accent-fg);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--accent-fg);
+  --input: var(--border);
+  --radius: 0.625rem;
 
   --shadow-sm: 0 1px 2px rgba(42, 37, 32, 0.04);
   --shadow-md: 0 2px 8px rgba(42, 37, 32, 0.06), 0 1px 2px rgba(42, 37, 32, 0.04);
@@ -93,6 +130,25 @@
   --warning: #f0bc5c;
   --danger: #e08575;
   --ring: var(--accent);
+
+  /* shadcn compatibility — same var() indirections, resolve dark values */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-fg);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-muted);
+  --accent-foreground: var(--accent-fg);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--accent-fg);
+  --input: var(--border);
+  --radius: 0.625rem;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5);
