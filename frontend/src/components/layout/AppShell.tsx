@@ -23,7 +23,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TopBar onOpenCommand={() => setCmdOpen(true)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} onToggleCollapsed={setCollapsed} autoHide={autoHide} />
-        <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
+        <main className="min-w-0 flex-1 overflow-hidden">
+          <div key={pathname} className="page-enter h-full">
+            {children}
+          </div>
+        </main>
       </div>
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
     </div>
