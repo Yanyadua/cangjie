@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ExtractionMode(str, Enum):
-    """抽取模式：standard 为当前默认，proposition 为命题化实验模式。"""
+    """抽取模式。Phase 2 起 proposition 为推荐默认。"""
     STANDARD = "standard"
     PROPOSITION = "proposition"
 

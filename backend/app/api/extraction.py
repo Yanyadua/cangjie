@@ -41,7 +41,7 @@ async def save_step1(document_id: str, data: dict, db: AsyncSession = Depends(ge
 @router.post("/extraction/{document_id}/step2")
 async def run_step2(
     document_id: str,
-    mode: ExtractionMode = ExtractionMode.STANDARD,
+    mode: ExtractionMode = ExtractionMode.PROPOSITION,
     db: AsyncSession = Depends(get_db),
 ):
     svc = ExtractionService(db)
@@ -54,7 +54,7 @@ async def run_step2(
 @router.get("/extraction/{document_id}/step2/stream")
 async def stream_step2(
     document_id: str,
-    mode: ExtractionMode = ExtractionMode.STANDARD,
+    mode: ExtractionMode = ExtractionMode.PROPOSITION,
     db: AsyncSession = Depends(get_db),
 ):
     """Stream step2 expand via SSE, saving the result when done."""
