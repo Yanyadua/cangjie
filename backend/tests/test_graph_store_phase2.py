@@ -33,3 +33,70 @@ async def test_create_node_without_parent_backward_compat(db_session):
     topic_id = await store.create_node(node_type="topic", name="topic")
     topic = await store.get_node(topic_id)
     assert topic["parent_node_id"] is None
+
+
+async def test_get_article_subgraph(db_session):
+    """get_article_subgraph 返回 article 的 claim + proposition + 内部边。"""
+    from uuid import uuid4
+    store = GraphStore(db_session)
+    doc_id = uuid4()
+
+    # 建 article + 2 claim + 1 proposition（都共享 source_document_id）
+    article_id = await store.create_node(
+        node_type="article", name="art", source_document_id=doc_id
+    )
+    claim1_id = await store.create_node(
+        node_type="claim", name="c1", source_document_id=doc_id
+    )
+    claim2_id = await store.create_node(
+        node_type="claim", name="c2", source_document_id=doc_id
+    )
+    prop1_id = await store.create_node(
+        node_type="proposition", name="p1", description="self-contained fact",
+        source_document_id=doc_id, parent_node_id=claim1_id,
+    )
+    # 边
+    await store.create_edge(claim1_id, prop1_id, "evidence_for", confidence=0.9)
+    await store.create_edge(claim1_id, claim2_id, "related_to", confidence=0.5)
+
+    # 查询
+    result = await store.get_article_subgraph(article_id)
+    assert result is not None
+    assert result["document_id"] == str(doc_id)
+    # nodes 应该有 3 个（2 claim + 1 prop），排除 article 自己
+    assert len(result["nodes"]) == 3
+    node_types = [n["node_type"] for n in result["nodes"]]
+    assert node_types.count("claim") == 2
+    assert node_types.count("proposition") == 1
+    # edges 应该有 2 条
+    assert len(result["edges"]) == 2
+
+
+async def test_get_article_subgraph_exclude_proposition(db_session):
+    """include_proposition=False 时不返回 proposition。"""
+    from uuid import uuid4
+    store = GraphStore(db_session)
+    doc_id = uuid4()
+    article_id = await store.create_node(
+        node_type="article", name="art", source_document_id=doc_id
+    )
+    claim1_id = await store.create_node(
+        node_type="claim", name="c1", source_document_id=doc_id
+    )
+    await store.create_node(
+        node_type="proposition", name="p1", description="self-contained fact",
+        source_document_id=doc_id, parent_node_id=claim1_id,
+    )
+
+    result = await store.get_article_subgraph(article_id, include_proposition=False)
+    node_types = [n["node_type"] for n in result["nodes"]]
+    assert "proposition" not in node_types
+    assert node_types.count("claim") == 1
+
+
+async def test_get_article_subgraph_not_found(db_session):
+    """article 不存在时返回 None。"""
+    from uuid import uuid4
+    store = GraphStore(db_session)
+    result = await store.get_article_subgraph(uuid4())
+    assert result is None

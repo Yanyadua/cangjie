@@ -363,6 +363,48 @@ class GraphStore:
         edges = result.scalars().all()
         return [self._edge_to_dict(e) for e in edges]
 
+    async def get_article_subgraph(
+        self,
+        article_id: UUID,
+        include_proposition: bool = True,
+    ) -> Optional[dict]:
+        """获取 article 节点下属的 claim + proposition + 内部边。
+
+        查询策略：通过 article.source_document_id 反查 document_id，
+        再查所有共享该 source_document_id 的节点。
+        """
+        # Step 1: 拿 document_id
+        art = await self.db.execute(
+            select(Node.source_document_id).where(Node.id == article_id)
+        )
+        doc_id = art.scalar_one_or_none()
+        if not doc_id:
+            return None
+
+        # Step 2: 查同 document 的知识节点（排除 article 自己）
+        node_query = select(Node).where(
+            and_(
+                Node.source_document_id == doc_id,
+                Node.id != article_id,
+                Node.status == "active",
+            )
+        )
+        if not include_proposition:
+            node_query = node_query.where(Node.node_type != "proposition")
+
+        nodes = (await self.db.execute(node_query)).scalars().all()
+        node_ids = [n.id for n in nodes]
+
+        # Step 3: 内部边
+        edges = await self.get_edges_for_nodes(node_ids) if node_ids else []
+
+        return {
+            "article_id": str(article_id),
+            "document_id": str(doc_id),
+            "nodes": [self._node_to_dict(n) for n in nodes],
+            "edges": edges,
+        }
+
     def _node_to_dict(self, node: Node) -> dict:
         return {
             "id": str(node.id),
