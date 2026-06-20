@@ -1,7 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDocuments, getDraftGraph } from '../api/client';
+import { ArrowLeft } from 'lucide-react';
+import { getDocuments } from '../api/client';
 import GraphEditor from '../components/GraphEditor';
+import { NodeCard } from '../components/NodeCard';
+import { EmptyState } from '../components/EmptyState';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { GraphNode, GraphEdge } from '../types/graph';
 
 type DocItem = {
@@ -14,17 +22,42 @@ type DocItem = {
   created_at: string;
 };
 
+type TabKey = 'all' | 'pending' | 'processed';
+
+// Map backend status string to a friendly bucket. Backend uses values like
+// 'processed', 'pending', 'draft', etc. Treat anything containing 'process'
+// (case-insensitive) as 已入库; everything else as 待确认.
+function bucketOf(status: string): 'pending' | 'processed' {
+  return /process/i.test(status) ? 'processed' : 'pending';
+}
+
+const TAB_LABEL: Record<TabKey, string> = {
+  all: '全部',
+  pending: '待确认',
+  processed: '已入库',
+};
+
+function statusVariant(status: string): 'default' | 'secondary' | 'destructive' {
+  const b = bucketOf(status);
+  if (b === 'processed') return 'default';
+  if (/error|fail/i.test(status)) return 'destructive';
+  return 'secondary';
+}
+
 export default function HistoryPage() {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<TabKey>('all');
+  const [filter, setFilter] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DocItem | null>(null);
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [graphStatus, setGraphStatus] = useState<string>('');
+  const [graphLoading, setGraphLoading] = useState(false);
 
   useEffect(() => {
     getDocuments(0, 100)
-      .then((res) => setDocuments(res.documents || []))
+      .then((res: any) => setDocuments(res.documents || []))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -33,18 +66,17 @@ export default function HistoryPage() {
     setSelectedDoc(doc);
     setGraphData(null);
     setGraphStatus('加载中...');
+    setGraphLoading(true);
 
-    // Find draft graph for this document
+    // Preserve original fallback chain: try /draft-graphs?document_id=, then
+    // /documents/:id/draft-graph. Only the second one is actually consumed.
     try {
       const dgRes = await fetch(`/api/draft-graphs?document_id=${doc.id}`);
       if (!dgRes.ok) throw new Error('not found');
-      // Backend doesn't have list-by-doc endpoint, use direct query
     } catch {
-      // fallback: no direct list API, show info
+      // fallback below
     }
 
-    // Use the document list from DB to find draft_graph_id
-    // We need to query draft_graphs by document_id
     try {
       const res = await fetch(`/api/documents/${doc.id}/draft-graph`);
       if (!res.ok) throw new Error('not found');
@@ -69,94 +101,146 @@ export default function HistoryPage() {
     } catch {
       setGraphData({ nodes: [], edges: [] });
       setGraphStatus('未找到图谱');
+    } finally {
+      setGraphLoading(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>加载中...</div>;
+  const visibleDocs = useMemo(() => {
+    let list = documents;
+    if (tab !== 'all') {
+      list = list.filter((d) => bucketOf(d.status) === tab);
+    }
+    const q = filter.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (d) =>
+          d.title.toLowerCase().includes(q) ||
+          (d.summary || '').toLowerCase().includes(q) ||
+          (d.source_type || '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [documents, tab, filter]);
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <LoadingSkeleton count={6} />
+      </div>
+    );
+  }
+
+  // Detail view: selected document + graph preview
+  if (selectedDoc) {
+    return (
+      <div className="flex h-[calc(100vh-56px)] flex-col">
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-2 px-5 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedDoc(null)}>
+              <ArrowLeft className="size-4" />
+              返回
+            </Button>
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-semibold text-text">{selectedDoc.title}</h3>
+              {selectedDoc.summary && (
+                <div className="truncate text-xs text-text-muted">{selectedDoc.summary}</div>
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-xs text-text-subtle">
+            <Badge variant={statusVariant(selectedDoc.status)}>{selectedDoc.status}</Badge>
+            <span>
+              图谱状态: {graphStatus} | 节点: {graphData?.nodes.length || 0} | 关系:{' '}
+              {graphData?.edges.length || 0}
+            </span>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1">
+          {graphData && graphData.nodes.length > 0 ? (
+            <GraphEditor graphData={graphData} editable={false} />
+          ) : graphLoading ? (
+            <div className="flex h-full items-center justify-center text-sm text-text-subtle">
+              加载中...
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-text-subtle">
+              {graphStatus || '未找到图谱'}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Grid view
+  if (documents.length === 0) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          title="还没有导入"
+          action={<Button onClick={() => navigate('/import')}>去导入</Button>}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
-      {/* Left: document list */}
-      <div style={{ width: 340, borderRight: '1px solid #e2e8f0', overflowY: 'auto' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontWeight: 600, fontSize: 14 }}>
-          历史文章 ({documents.length})
+    <div className="p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-text">历史文章 ({documents.length})</h2>
+        <div className="flex items-center gap-2">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+            <TabsList>
+              <TabsTrigger value="all">{TAB_LABEL.all}</TabsTrigger>
+              <TabsTrigger value="pending">{TAB_LABEL.pending}</TabsTrigger>
+              <TabsTrigger value="processed">{TAB_LABEL.processed}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="筛选标题 / 摘要..."
+            className="h-9 w-56"
+          />
         </div>
-        {documents.length === 0 && (
-          <div style={{ padding: 16, color: '#94a3b8', textAlign: 'center' }}>暂无文章</div>
-        )}
-        {documents.map((doc) => (
-          <div
-            key={doc.id}
-            onClick={() => handleSelectDoc(doc)}
-            style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid #f1f5f9',
-              cursor: 'pointer',
-              background: selectedDoc?.id === doc.id ? '#eff6ff' : '#fff',
-            }}
-          >
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, lineHeight: 1.4 }}>
-              {doc.title}
-            </div>
-            <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#94a3b8' }}>
-              <span>{doc.source_type || '手动导入'}</span>
-              <span>{new Date(doc.created_at).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-              <span style={{
-                color: doc.status === 'processed' ? '#10b981' : '#f59e0b',
-              }}>
-                {doc.status}
-              </span>
-            </div>
-            {doc.summary && (
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {doc.summary}
-              </div>
-            )}
-          </div>
-        ))}
       </div>
 
-      {/* Right: graph preview */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {selectedDoc ? (
-          <>
-            {/* Header */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 15 }}>{selectedDoc.title}</h3>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                    {selectedDoc.summary}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
-                    图谱状态: {graphStatus} | 节点: {graphData?.nodes.length || 0} | 关系: {graphData?.edges.length || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Graph */}
-            {graphData && graphData.nodes.length > 0 ? (
-              <div style={{ flex: 1 }}>
-                <GraphEditor
-                  graphData={graphData}
-                  editable={false}
-                />
-              </div>
-            ) : (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                {graphStatus || '选择一篇文章查看图谱'}
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-            选择左侧文章查看对应图谱
-          </div>
-        )}
-      </div>
+      {visibleDocs.length === 0 ? (
+        <EmptyState title="暂无匹配" hint="尝试切换分类或修改筛选条件。" />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {visibleDocs.map((doc) => (
+            <button
+              key={doc.id}
+              type="button"
+              className="text-left"
+              onClick={() => handleSelectDoc(doc)}
+            >
+              <NodeCard
+                nodeType="article"
+                name={doc.title}
+                description={doc.summary}
+                meta={
+                  <>
+                    <Badge variant={statusVariant(doc.status)}>{doc.status}</Badge>
+                    <span>{doc.source_type || '手动导入'}</span>
+                    <span>
+                      {new Date(doc.created_at).toLocaleString('zh-CN', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </>
+                }
+              />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
