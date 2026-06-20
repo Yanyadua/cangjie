@@ -1,12 +1,24 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import GraphEditor from '../components/GraphEditor';
+import NodeInspector from '../components/NodeInspector';
 import { getGlobalGraph, getLocalGraph, getNodeDetail } from '../api/client';
+import { nodeColorVar } from '@/lib/utils';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Card, CardContent } from '../components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '../components/ui/sheet';
+import { EmptyState } from '../components/EmptyState';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import type { GraphNode, GraphEdge } from '../types/graph';
-import { NODE_COLORS } from '../types/graph';
 
 type FilterType = 'all' | 'topic' | 'article';
 
+const LEGEND_TYPES: string[] = ['concept', 'topic', 'article', 'claim', 'question'];
+
 export default function GlobalGraphPage() {
+  const navigate = useNavigate();
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -104,65 +116,111 @@ export default function GlobalGraphPage() {
     }
   };
 
-  const topicCount = graphData.nodes.filter(n => n.nodeType === 'topic').length;
-  const articleCount = graphData.nodes.filter(n => n.nodeType === 'article').length;
+  const handleSheetOpenChange = (open: boolean) => {
+    if (!open) {
+      setSelectedNode(null);
+    }
+  };
+
+  const isEmpty = !loading && graphData.nodes.length === 0;
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: 12, borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索节点..." onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            style={{ flex: 1, padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14 }} />
-          <button onClick={handleSearch} disabled={loading}
-            style={{ padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+    <div className="relative h-[calc(100vh-56px)] w-full">
+      {/* Top bar: search + filter tabs */}
+      <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索节点..."
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="max-w-xs bg-surface"
+          />
+          <Button onClick={handleSearch} disabled={loading} size="sm">
             {loading ? '搜索中...' : '搜索'}
-          </button>
-          <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-            {(['all', 'topic', 'article'] as FilterType[]).map(ft => (
-              <button key={ft} onClick={() => setFilterType(ft)} style={{
-                padding: '6px 12px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                background: filterType === ft ? '#3b82f6' : '#f1f5f9', color: filterType === ft ? '#fff' : '#64748b', border: 'none',
-              }}>
-                {ft === 'all' ? `全部 (${topicCount + articleCount})` : ft === 'topic' ? `主题 (${topicCount})` : `文章 (${articleCount})`}
-              </button>
-            ))}
+          </Button>
+        </div>
+        <div className="flex items-center">
+          <Tabs value={filterType} onValueChange={(v) => setFilterType(v as FilterType)}>
+            <TabsList>
+              <TabsTrigger value="all">力导向</TabsTrigger>
+              <TabsTrigger value="topic">聚类</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Loading overlay */}
+      {loading && (
+        <div className="flex h-full items-center justify-center pt-16">
+          <div className="w-full max-w-md p-6">
+            <LoadingSkeleton count={4} />
           </div>
         </div>
-        <div style={{ flex: 1 }}>
+      )}
+
+      {/* Empty state */}
+      {isEmpty && (
+        <div className="flex h-full items-center justify-center pt-16">
+          <EmptyState
+            title="知识库还是空的"
+            action={<Button onClick={() => navigate('/import')}>去导入</Button>}
+          />
+        </div>
+      )}
+
+      {/* Canvas */}
+      {!loading && !isEmpty && (
+        <>
           <GraphEditor graphData={graphData} editable={false} onNodeClick={handleNodeClick} />
-        </div>
-      </div>
-      <div style={{ width: 360, borderLeft: '1px solid #e2e8f0', overflowY: 'auto' }}>
-        {selectedNode ? (
-          <div style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-              borderLeft: `4px solid ${NODE_COLORS[selectedNode.nodeType] || '#94a3b8'}`, paddingLeft: 10 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{selectedNode.name}</div>
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>{selectedNode.nodeType}</div>
-              </div>
-            </div>
-            {selectedNode.description && (
-              <div style={{ fontSize: 13, color: '#475569', marginBottom: 12, lineHeight: 1.5 }}>{selectedNode.description}</div>
-            )}
-            {articleGraph && (
-              <div style={{ marginTop: 12 }}>
-                <h4 style={{ fontSize: 13, margin: '0 0 8px 0', color: '#64748b' }}>文章内部图谱</h4>
-                <div style={{ height: 300, border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-                  <GraphEditor graphData={articleGraph} editable={false} />
+
+          {/* Bottom-left legend */}
+          <Card className="absolute bottom-4 left-4 z-10 gap-0 py-3 shadow-md">
+            <CardContent className="flex flex-col gap-1.5 px-4">
+              {LEGEND_TYPES.map((type) => (
+                <div key={type} className="flex items-center gap-2">
+                  <span
+                    className="h-3 w-3 rounded-sm"
+                    style={{ background: nodeColorVar(type) }}
+                  />
+                  <span className="text-xs text-text-muted">{type}</span>
                 </div>
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Node detail Sheet */}
+      <Sheet open={selectedNode !== null} onOpenChange={handleSheetOpenChange}>
+        <SheetContent side="right">
+          {selectedNode && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedNode.name}</SheetTitle>
+                <SheetDescription>{selectedNode.nodeType}</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto">
+                {selectedNode.description && (
+                  <div className="mb-3 px-4 text-sm text-text-muted">{selectedNode.description}</div>
+                )}
+                {articleGraph && (
+                  <div className="mt-2 px-4">
+                    <h4 className="mb-2 text-xs text-text-muted">文章内部图谱</h4>
+                    <div className="h-[300px] overflow-hidden rounded-lg border border-border">
+                      <GraphEditor graphData={articleGraph} editable={false} />
+                    </div>
+                  </div>
+                )}
+                {!articleGraph && (
+                  <NodeInspector node={selectedNode} editable={false} />
+                )}
               </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ padding: 16, color: '#94a3b8', fontSize: 13 }}>
-            点击节点查看详情<br /><br />
-            点击<b>主题</b>节点展开邻居<br />
-            点击<b>文章</b>节点查看内部图谱
-          </div>
-        )}
-      </div>
+            </>
+          )}
+          <SheetFooter />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
