@@ -87,7 +87,7 @@ export default function EvaluationLabPage() {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24, height: 'calc(100vh - 56px)', overflowY: 'auto' }}>
       <h2 style={{ margin: '0 0 20px 0' }}>图谱评估实验室</h2>
 
       {/* 配置区 */}

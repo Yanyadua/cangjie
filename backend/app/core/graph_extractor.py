@@ -251,16 +251,28 @@ _EXPAND_SYSTEM = (
 )
 
 _EXPAND_PROPOSITION_SYSTEM = (
-    "你是一个命题化知识图谱展开模块。基于文章骨架，将每个 claim 节点展开为 3-7 个自包含的命题节点（proposition）。\n\n"
-    "命题三性要求（严格遵守）：\n"
+    "你是一个命题化知识图谱展开模块。基于文章骨架，将每个 claim 节点展开为 2-5 个高质量自包含命题（proposition）。\n\n"
+    "## 核心原则：宁缺毋滥（非常重要）\n"
+    "命题的价值在于「精确捕获能脱离上下文独立成立的事实」。**不要为了凑数而拆分**。质量优先于数量——\n"
+    "如果某个 claim 在原文中只有 2 个清晰可独立的事实，就只生成 2 个，绝不生成 5 个。\n\n"
+    "## 命题三性（严格遵守）\n"
     "1. unique（唯一）：每个命题含义唯一，不与其他命题重叠\n"
     "2. atomic（原子）：不可再分为更小的独立事实\n"
     "3. self-contained（自包含）：包含所有必要上下文（数据、条件、引用、主语）\n\n"
-    "正例（自包含）：「在 MultiHop-RAG 数据集上，GraphRAG 的 F1=0.73，比传统 RAG 高 15 个百分点（论文表3）」\n"
-    "反例（标签化）：「GraphRAG F1 很高」（缺数据集和具体值）\n\n"
-    "展开规则：\n"
+    "## SKIP 清单（必须跳过，不要建 proposition）\n"
+    "- 原文只是过渡/铺垫/承上启下，不构成独立事实\n"
+    "- 纯背景介绍（如「近年来 X 领域发展迅速」），无具体数据/对比/结论\n"
+    "- 与同 claim 下其他命题语义重叠 ≥70%（合并为一个）\n"
+    "- 无法脱离上下文独立成立（缺主语、缺条件、缺数据来源）\n"
+    "- 重复 claim 本身的 name 或 description，没补充新信息\n\n"
+    "## 正反例\n"
+    "✅ 自包含：「在 MultiHop-RAG 数据集上，GraphRAG 的 F1=0.73，比传统 RAG 高 15 个百分点（论文表3）」\n"
+    "❌ 标签化：「GraphRAG F1 很高」（缺数据集和具体值）\n"
+    "❌ 过度拆分：「GraphRAG 的 F1=0.73」和「传统 RAG 的 F1 较低」应合并为上面那条对比命题\n"
+    "❌ 背景无数据：「近年来检索增强生成技术得到广泛应用」（无具体数据，应 SKIP）\n\n"
+    "## 展开规则\n"
     "1. 保留骨架中的 article、topic、claim 节点\n"
-    "2. 围绕每个 claim 节点展开 3-7 个 proposition 节点，覆盖该 claim 的所有细节、数据、对比、条件\n"
+    "2. 围绕每个 claim 节点展开 2-5 个 proposition 节点；**只在原文确实有多个独立事实时才生成多个**\n"
     "3. 每个 proposition 必须有 parent_claim_id 指向所属 claim 的 temp_id\n"
     "4. proposition 的 description 必须是完整的自包含事实陈述，≥30 字\n"
     "5. 如果原文有具体数据，必须包含在 description 和 metadata.data_points 中\n"
@@ -268,9 +280,9 @@ _EXPAND_PROPOSITION_SYSTEM = (
     "   - proposition → claim: 用 evidence_for（提供证据）或 supports/contradicts（表明立场）\n"
     "   - article → topic: tag\n"
     "   - article → claim: contains\n"
-    "   - proposition ↔ proposition: causes/derived_from/compares_with（还原推理链）\n"
+    "   - proposition ↔ proposition: 仅在有明确因果/派生/对比关系时建立，避免为每个 prop 都建一条边\n"
     "7. 每条边必须有 evidence，尽量引用原文\n"
-    "8. 单个 claim 下的 proposition 数量不超过 7 个\n\n"
+    "8. 单个 claim 下的 proposition 数量上限 5 个；超过的优先保留证据最强的\n\n"
     + _RELATION_GUIDANCE +
     "\n节点类型只能使用：\n"
     "article, concept, claim, topic, person, organization, paper, project, "
@@ -447,9 +459,9 @@ def _validate_and_sanitize(raw: dict) -> dict:
                 continue
             parent_claim_ids.add(parent)
             current_count = proposition_counts.get(parent, 0)
-            if current_count >= 7:
+            if current_count >= 5:
                 errors.append(
-                    f"nodes[{idx}] claim '{parent}' 下 proposition 已达 7 个上限，skipped"
+                    f"nodes[{idx}] claim '{parent}' 下 proposition 已达 5 个上限，skipped"
                 )
                 continue
             proposition_counts[parent] = current_count + 1
