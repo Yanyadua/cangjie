@@ -128,6 +128,9 @@ class ClusteringService:
 
         proposal = prop.proposal_json
         document_id = proposal["document_id"]
+        from uuid import UUID
+        if isinstance(document_id, str):
+            document_id = UUID(document_id)
         partition_action = proposal.get("partition_action", {})
         tag_actions = proposal.get("tag_actions", [])
         topic_edges = proposal.get("topic_edges", [])
@@ -273,6 +276,119 @@ class ClusteringService:
                 except Exception as e:
                     failed.append(f"Topic edge {source_tag}->{target_tag}: {e}")
 
+        # ── Phase 2: 知识节点入库（claim / proposition / concept 等）──
+        import os
+        knowledge_ingest = os.getenv("PHASE2_KNOWLEDGE_INGEST", "true") == "true"
+
+        knowledge_counts: dict = {}
+        knowledge_edges_created = 0
+
+        if knowledge_ingest:
+            from ..models.db_models import DraftGraph
+            dg_result = await self.db.execute(
+                select(DraftGraph).where(
+                    DraftGraph.document_id == document_id
+                ).order_by(DraftGraph.updated_at.desc()).limit(1)
+            )
+            draft = dg_result.scalar_one_or_none()
+            if draft:
+                draft_graph = draft.graph_json
+                temp_to_uuid: dict = {}
+
+                raw_nodes = draft_graph.get("nodes", [])
+                skip_types = {"topic", "article"}  # 这些上游已处理
+
+                # Pass 1: 非 proposition 节点（claim/concept/method/...）
+                for n in raw_nodes:
+                    ntype = n.get("node_type")
+                    if ntype in skip_types or ntype == "proposition":
+                        continue
+                    temp_id = n.get("temp_id")
+                    if not temp_id:
+                        continue
+                    try:
+                        node_uuid = await self.graph_store.create_node(
+                            node_type=ntype,
+                            name=str(n.get("name", "")),
+                            description=str(n.get("description", "")),
+                            source_document_id=document_id,
+                        )
+                        temp_to_uuid[temp_id] = node_uuid
+                        knowledge_counts[ntype] = knowledge_counts.get(ntype, 0) + 1
+                        # claim 生成 embedding（失败不阻塞）
+                        if ntype == "claim":
+                            try:
+                                emb = await self.embedding.embed(
+                                    str(n.get("description") or n.get("name", ""))
+                                )
+                                await self.vector_store.upsert_node_embedding(node_uuid, emb)
+                            except Exception as e:
+                                logger.warning(f"Claim embedding failed: {e}")
+                    except Exception as e:
+                        failed.append(f"Node '{temp_id}': {e}")
+
+                # Pass 2: proposition 节点（依赖 parent claim 已入库）
+                for n in raw_nodes:
+                    if n.get("node_type") != "proposition":
+                        continue
+                    temp_id = n.get("temp_id")
+                    parent_temp = n.get("parent_claim_id")
+                    parent_uuid = temp_to_uuid.get(parent_temp) if parent_temp else None
+                    if not temp_id:
+                        continue
+                    try:
+                        node_uuid = await self.graph_store.create_node(
+                            node_type="proposition",
+                            name=str(n.get("name", "")),
+                            description=str(n.get("description", "")),
+                            source_document_id=document_id,
+                            parent_node_id=parent_uuid,
+                        )
+                        temp_to_uuid[temp_id] = node_uuid
+                        knowledge_counts["proposition"] = knowledge_counts.get("proposition", 0) + 1
+                    except Exception as e:
+                        failed.append(f"Proposition '{temp_id}': {e}")
+
+                # Pass 3: 知识边（两端都是知识节点）
+                for e in draft_graph.get("edges", []):
+                    src_temp = e.get("source")
+                    tgt_temp = e.get("target")
+                    src_uuid = temp_to_uuid.get(src_temp)
+                    tgt_uuid = temp_to_uuid.get(tgt_temp)
+                    if not src_uuid or not tgt_uuid:
+                        continue
+                    try:
+                        await self.graph_store.create_edge(
+                            source_id=src_uuid,
+                            target_id=tgt_uuid,
+                            relation_type=e.get("relation_type", "related_to"),
+                            confidence=float(e.get("confidence", 0.8)),
+                            evidence_document_id=document_id,
+                            evidence_text=str(e.get("evidence", "")),
+                        )
+                        knowledge_edges_created += 1
+                    except Exception as e_err:
+                        failed.append(f"Edge {src_temp}->{tgt_temp}: {e_err}")
+
+                # Pass 4: article → claim 的 contains 边
+                for n in raw_nodes:
+                    if n.get("node_type") != "claim":
+                        continue
+                    claim_temp = n.get("temp_id")
+                    claim_uuid = temp_to_uuid.get(claim_temp)
+                    if not claim_uuid:
+                        continue
+                    try:
+                        await self.graph_store.create_edge(
+                            source_id=article_id,
+                            target_id=claim_uuid,
+                            relation_type="contains",
+                            confidence=1.0,
+                            evidence_document_id=document_id,
+                        )
+                    except Exception as e:
+                        logger.warning(f"article->claim contains edge failed: {e}")
+
         prop.status = "applied"
         flag_modified(prop, "status")
         await self.db.flush()
@@ -282,4 +398,6 @@ class ClusteringService:
             "article_node_id": str(article_id),
             "applied": applied,
             "failed": failed,
+            "knowledge_nodes_created": knowledge_counts,
+            "knowledge_edges_created": knowledge_edges_created,
         }
