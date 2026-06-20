@@ -53,10 +53,10 @@ class VectorStore:
 
         query_sql = f"""
             SELECT id, node_type, name, description,
-                   embedding <=> :emb::vector AS distance
+                   embedding::vector <=> CAST(:emb AS vector) AS distance
             FROM nodes
             WHERE status = 'active' AND embedding IS NOT NULL {type_filter}
-            ORDER BY embedding <=> :emb::vector
+            ORDER BY embedding::vector <=> CAST(:emb AS vector)
             LIMIT :top_k
         """
         result = await self.db.execute(text(query_sql), params)
@@ -79,10 +79,10 @@ class VectorStore:
         emb_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
         query_sql = """
             SELECT c.id, c.document_id, c.content,
-                   c.embedding <=> :emb::vector AS distance
+                   c.embedding::vector <=> CAST(:emb AS vector) AS distance
             FROM chunks c
             WHERE c.embedding IS NOT NULL
-            ORDER BY c.embedding <=> :emb::vector
+            ORDER BY c.embedding::vector <=> CAST(:emb AS vector)
             LIMIT :top_k
         """
         result = await self.db.execute(text(query_sql), {"emb": emb_str, "top_k": top_k})
