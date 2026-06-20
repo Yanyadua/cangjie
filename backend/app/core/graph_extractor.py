@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from .llm_client import LLMClient
 
@@ -27,13 +27,16 @@ logger = logging.getLogger(__name__)
 VALID_NODE_TYPES = frozenset({
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology", "question",
+    "partition",
+    "proposition",  # 自包含原子事实（Dense X Retrieval）
+    "section",      # 章节分组容器（弱化使用，仅多级章节文章）
 })
 
 VALID_RELATION_TYPES = frozenset({
     "related_to", "contains", "part_of", "supports", "contradicts",
     "depends_on", "implements", "improves", "causes", "compares_with",
     "derived_from", "used_for", "evidence_for", "mentions", "similar_to",
-    "belongs_to",
+    "belongs_to", "root", "tag",
 })
 
 REQUIRED_NODE_FIELDS = {"temp_id", "node_type", "name", "description"}
@@ -104,6 +107,202 @@ _RELATION_GUIDANCE = """
 - belongs_to: A 属于 B（如：方法属于某个组织）
 - related_to: 以上均不适用时的兜底类型
 """
+
+# ── Progressive extraction prompts (2-step) ──
+
+_FEWSHOT_SKELETON_OUTPUT = json.dumps({
+    "summary": "本文介绍了微软研究院提出的 GraphRAG 方法，通过知识图谱和社区检测改进传统 RAG 的全局推理能力。",
+    "topic_tags": [
+        {"name": "检索增强生成", "confidence": 0.95},
+        {"name": "知识图谱", "confidence": 0.9},
+        {"name": "社区检测", "confidence": 0.85},
+        {"name": "RAG", "confidence": 0.8},
+        {"name": "知识管理", "confidence": 0.6}
+    ],
+    "core_claims": [
+        {
+            "name": "GraphRAG 在全局理解任务上优于传统 RAG",
+            "description": "实验表明 GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"
+        },
+        {
+            "name": "社区检测是 GraphRAG 的关键步骤",
+            "description": "GraphRAG 利用 Leiden 算法将知识图谱划分为局部子图并生成社区摘要"
+        },
+        {
+            "name": "传统 RAG 在跨文档推理时表现不佳",
+            "description": "传统 RAG 通过向量相似度检索文档片段，但在需要跨文档推理或全局理解时存在局限"
+        }
+    ]
+}, ensure_ascii=False, indent=2)
+
+_FEWSHOT_EXPAND_OUTPUT = json.dumps({
+    "nodes": [
+        {"temp_id": "n1", "node_type": "article", "name": "GraphRAG：基于知识图谱的检索增强生成", "description": "文章整体节点"},
+        {"temp_id": "n2", "node_type": "topic", "name": "检索增强生成", "description": "文章核心主题，涉及利用外部知识增强生成的方法"},
+        {"temp_id": "n3", "node_type": "topic", "name": "知识图谱", "description": "文章核心主题，GraphRAG 的基础数据结构"},
+        {"temp_id": "n4", "node_type": "topic", "name": "社区检测", "description": "文章涉及的关键技术主题"},
+        {"temp_id": "n5", "node_type": "claim", "name": "GraphRAG 在全局理解任务上优于传统 RAG", "description": "实验表明 GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "n6", "node_type": "claim", "name": "社区检测是 GraphRAG 的关键步骤", "description": "GraphRAG 利用 Leiden 算法将知识图谱划分为局部子图并生成社区摘要"},
+        {"temp_id": "n7", "node_type": "claim", "name": "传统 RAG 在跨文档推理时表现不佳", "description": "传统 RAG 通过向量相似度检索文档片段，但在需要跨文档推理或全局理解时存在局限"},
+        {"temp_id": "n8", "node_type": "method", "name": "GraphRAG", "description": "微软研究院提出的基于知识图谱的检索增强生成方法"},
+        {"temp_id": "n9", "node_type": "concept", "name": "传统 RAG", "description": "基于向量相似度的检索增强生成方法，GraphRAG 的改进对象"},
+        {"temp_id": "n10", "node_type": "method", "name": "Leiden 算法", "description": "GraphRAG 中使用的社区检测算法"},
+        {"temp_id": "n11", "node_type": "organization", "name": "微软研究院", "description": "提出 GraphRAG 的研究机构"}
+    ],
+    "edges": [
+        {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "tag", "confidence": 0.95, "evidence": "文章围绕检索增强生成展开讨论"},
+        {"temp_id": "e2", "source": "n1", "target": "n3", "relation_type": "tag", "confidence": 0.9, "evidence": "知识图谱是文章的核心主题"},
+        {"temp_id": "e3", "source": "n1", "target": "n4", "relation_type": "tag", "confidence": 0.85, "evidence": "社区检测是文章涉及的关键技术"},
+        {"temp_id": "e4", "source": "n1", "target": "n5", "relation_type": "contains", "confidence": 1.0, "evidence": "文章提出了 GraphRAG 在全局理解任务上优于传统 RAG 的观点"},
+        {"temp_id": "e5", "source": "n1", "target": "n6", "relation_type": "contains", "confidence": 1.0, "evidence": "文章指出社区检测是 GraphRAG 的关键步骤"},
+        {"temp_id": "e6", "source": "n1", "target": "n7", "relation_type": "contains", "confidence": 1.0, "evidence": "文章指出传统 RAG 在跨文档推理时表现不佳"},
+        {"temp_id": "e7", "source": "n8", "target": "n9", "relation_type": "improves", "confidence": 0.95, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "e8", "source": "n8", "target": "n3", "relation_type": "depends_on", "confidence": 0.95, "evidence": "GraphRAG 的核心思路是先将文档集合转化为知识图谱"},
+        {"temp_id": "e9", "source": "n8", "target": "n11", "relation_type": "belongs_to", "confidence": 1.0, "evidence": "GraphRAG 是微软研究院提出的"},
+        {"temp_id": "e10", "source": "n5", "target": "n8", "relation_type": "supports", "confidence": 0.9, "evidence": "实验表明，GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"}
+    ]
+}, ensure_ascii=False, indent=2)
+
+_FEWSHOT_PROPOSITION_OUTPUT = json.dumps({
+    "nodes": [
+        {"temp_id": "n1", "node_type": "article", "name": "GraphRAG：基于知识图谱的检索增强生成", "description": "文章整体节点"},
+        {"temp_id": "n2", "node_type": "topic", "name": "检索增强生成", "description": "文章核心主题"},
+        {"temp_id": "n3", "node_type": "claim", "name": "GraphRAG 在全局理解任务上优于传统 RAG", "description": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG"},
+        {"temp_id": "p1", "node_type": "proposition", "name": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG",
+         "description": "GraphRAG 在需要跨文档推理或全局理解的数据集（如 MultiHop-RAG）上显著优于传统 RAG 方法（论文实验部分）",
+         "parent_claim_id": "n3",
+         "metadata": {"data_points": ["显著优于"], "conditions": ["全局理解任务"], "citations": ["实验部分"]}},
+        {"temp_id": "p2", "node_type": "proposition", "name": "传统 RAG 在跨文档推理时表现不佳",
+         "description": "传统 RAG 系统通过向量相似度检索文档片段，在需要跨文档推理或全局理解时存在局限，无法整合多文档信息",
+         "parent_claim_id": "n3",
+         "metadata": {"data_points": [], "conditions": ["跨文档推理任务"], "citations": []}},
+        {"temp_id": "p3", "node_type": "proposition", "name": "GraphRAG 在 MultiHop-RAG 上 F1=0.73",
+         "description": "在 MultiHop-RAG 数据集（含 2023 年新闻的多跳推理问题）上，GraphRAG 的 F1 达到 0.73，比传统 RAG 高 15 个百分点（论文表3）",
+         "parent_claim_id": "n3",
+         "metadata": {"data_points": ["F1=0.73", "+15pp"], "conditions": ["MultiHop-RAG dataset"], "citations": ["表3"]}},
+        {"temp_id": "p4", "node_type": "proposition", "name": "GraphRAG 索引阶段计算成本高于传统 RAG",
+         "description": "GraphRAG 的索引阶段需要构建知识图谱并运行社区检测，相比传统 RAG 的纯向量索引有更高的前期计算成本，但查询时收益明显",
+         "parent_claim_id": "n3",
+         "metadata": {"data_points": [], "conditions": ["索引阶段"], "citations": []}}
+    ],
+    "edges": [
+        {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "tag", "confidence": 0.95, "evidence": "文章围绕检索增强生成展开"},
+        {"temp_id": "e2", "source": "n1", "target": "n3", "relation_type": "contains", "confidence": 1.0, "evidence": "文章核心观点"},
+        {"temp_id": "e3", "source": "p1", "target": "n3", "relation_type": "evidence_for", "confidence": 0.9, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "e4", "source": "p2", "target": "n3", "relation_type": "supports", "confidence": 0.85, "evidence": "传统 RAG 通过向量相似度检索文档片段，但在需要跨文档推理或全局理解时表现不佳"},
+        {"temp_id": "e5", "source": "p3", "target": "n3", "relation_type": "evidence_for", "confidence": 0.95, "evidence": "GraphRAG 在需要全局理解的数据集上显著优于传统 RAG 方法"},
+        {"temp_id": "e6", "source": "p2", "target": "p1", "relation_type": "causes", "confidence": 0.85, "evidence": "传统 RAG 在跨文档推理时表现不佳，这促使 GraphRAG 提出图增强方案（prop↔prop 推理链，非原文直引）"}
+    ]
+}, ensure_ascii=False, indent=2)
+
+_SKELETON_SYSTEM = (
+    "你是一个文章级骨架抽取模块。你的任务是快速分析文章并输出文章的宏观骨架信息。\n\n"
+    "只关注文章层面的宏观信息，不要提取具体实体（如人物、机构等）。\n\n"
+    "你需要输出以下内容：\n"
+    "1. summary: 1-2句话的文章摘要\n"
+    "2. topic_tags: 3-5 个主题标签，每个标签包含 name（标签名）和 confidence（0-1 的置信度）\n"
+    "3. core_claims: 2-4 个文章核心观点，每个观点包含 name（观点标题）和 description（简短描述）\n\n"
+    "重要：不要提取具体的人名、组织名、工具名等实体，只提取文章层面的大局信息。\n\n"
+    "输出严格 JSON，不要输出 Markdown，不要输出解释文字。\n"
+    "输出格式：\n"
+    "{\n"
+    '  "summary": "文章摘要",\n'
+    '  "topic_tags": [\n'
+    '    {"name": "标签名", "confidence": 0.9}\n'
+    "  ],\n"
+    '  "core_claims": [\n'
+    '    {"name": "观点标题", "description": "观点描述"}\n'
+    "  ]\n"
+    "}\n\n"
+    "示例：\n"
+    f"输入：{_FEWSHOT_INPUT}\n"
+    f"输出：{_FEWSHOT_SKELETON_OUTPUT}"
+)
+
+_EXPAND_SYSTEM = (
+    "你是一个知识图谱展开模块。你的任务是基于文章骨架信息，将骨架展开为完整的知识图谱。\n\n"
+    "你需要在一次调用中输出完整的 nodes 和 edges。\n\n"
+    "展开规则：\n"
+    "1. 将 topic_tags 中的每个标签创建为 topic 类型的节点\n"
+    "2. 将 core_claims 中的每个观点创建为 claim 类型的节点\n"
+    "3. 创建一个 article 类型的节点代表文章整体\n"
+    "4. 围绕每个 claim，展开相关实体（人物、方法、概念、工具、组织等）\n"
+    "5. 通过以下关系连接节点：\n"
+    "   - article → topic: 使用 tag 关系（文章被打上该主题标签）\n"
+    "   - article → claim: 使用 contains 关系（文章包含该观点）\n"
+    "6. 为每条边提供 evidence，尽量引用原文中的句子\n"
+    "7. confidence 反映你对这条关系的确信程度（0-1）\n"
+    "8. 输出严格 JSON，不要输出 Markdown\n\n"
+    + _RELATION_GUIDANCE +
+    "\n节点类型只能使用：\n"
+    "article, concept, claim, topic, person, organization, paper, project, "
+    "framework, tool, method, technology, question\n\n"
+    "输出 JSON 格式：\n"
+    "{\n"
+    '  "nodes": [\n'
+    '    {"temp_id": "n1", "node_type": "类型", "name": "名称", "description": "描述"}\n'
+    "  ],\n"
+    '  "edges": [\n'
+    '    {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "关系类型", "confidence": 0.9, "evidence": "原文证据"}\n'
+    "  ]\n"
+    "}\n\n"
+    "示例：\n"
+    f"输出：{_FEWSHOT_EXPAND_OUTPUT}"
+)
+
+_EXPAND_PROPOSITION_SYSTEM = (
+    "你是一个命题化知识图谱展开模块。基于文章骨架，将每个 claim 节点展开为 2-5 个高质量自包含命题（proposition）。\n\n"
+    "## 核心原则：宁缺毋滥（非常重要）\n"
+    "命题的价值在于「精确捕获能脱离上下文独立成立的事实」。**不要为了凑数而拆分**。质量优先于数量——\n"
+    "如果某个 claim 在原文中只有 2 个清晰可独立的事实，就只生成 2 个，绝不生成 5 个。\n\n"
+    "## 命题三性（严格遵守）\n"
+    "1. unique（唯一）：每个命题含义唯一，不与其他命题重叠\n"
+    "2. atomic（原子）：不可再分为更小的独立事实\n"
+    "3. self-contained（自包含）：包含所有必要上下文（数据、条件、引用、主语）\n\n"
+    "## SKIP 清单（必须跳过，不要建 proposition）\n"
+    "- 原文只是过渡/铺垫/承上启下，不构成独立事实\n"
+    "- 纯背景介绍（如「近年来 X 领域发展迅速」），无具体数据/对比/结论\n"
+    "- 与同 claim 下其他命题语义重叠 ≥70%（合并为一个）\n"
+    "- 无法脱离上下文独立成立（缺主语、缺条件、缺数据来源）\n"
+    "- 重复 claim 本身的 name 或 description，没补充新信息\n\n"
+    "## 正反例\n"
+    "✅ 自包含：「在 MultiHop-RAG 数据集上，GraphRAG 的 F1=0.73，比传统 RAG 高 15 个百分点（论文表3）」\n"
+    "❌ 标签化：「GraphRAG F1 很高」（缺数据集和具体值）\n"
+    "❌ 过度拆分：「GraphRAG 的 F1=0.73」和「传统 RAG 的 F1 较低」应合并为上面那条对比命题\n"
+    "❌ 背景无数据：「近年来检索增强生成技术得到广泛应用」（无具体数据，应 SKIP）\n\n"
+    "## 展开规则\n"
+    "1. 保留骨架中的 article、topic、claim 节点\n"
+    "2. 围绕每个 claim 节点展开 2-5 个 proposition 节点；**只在原文确实有多个独立事实时才生成多个**\n"
+    "3. 每个 proposition 必须有 parent_claim_id 指向所属 claim 的 temp_id\n"
+    "4. proposition 的 description 必须是完整的自包含事实陈述，≥30 字\n"
+    "5. 如果原文有具体数据，必须包含在 description 和 metadata.data_points 中\n"
+    "6. 通过以下关系连接：\n"
+    "   - proposition → claim: 用 evidence_for（提供证据）或 supports/contradicts（表明立场）\n"
+    "   - article → topic: tag\n"
+    "   - article → claim: contains\n"
+    "   - proposition ↔ proposition: 仅在有明确因果/派生/对比关系时建立，避免为每个 prop 都建一条边\n"
+    "7. 每条边必须有 evidence，尽量引用原文\n"
+    "8. 单个 claim 下的 proposition 数量上限 5 个；超过的优先保留证据最强的\n\n"
+    + _RELATION_GUIDANCE +
+    "\n节点类型只能使用：\n"
+    "article, concept, claim, topic, person, organization, paper, project, "
+    "framework, tool, method, technology, question, proposition, section\n"
+    "（section 仅在多级章节明显的文章使用，作为 claim 的分组容器；普通文章不要建 section 节点）\n\n"
+    "输出 JSON 格式：\n"
+    "{\n"
+    '  "nodes": [\n'
+    '    {"temp_id": "n1", "node_type": "类型", "name": "名称", "description": "描述"},\n'
+    '    // 仅 proposition 节点需要 parent_claim_id 和 metadata 字段：\n'
+    '    {"temp_id": "p1", "node_type": "proposition", "name": "...", "description": "...",\n'
+    '     "parent_claim_id": "n3", "metadata": {"data_points": [...], "conditions": [...], "citations": [...]}}\n'
+    "  ],\n"
+    '  "edges": [\n'
+    '    {"temp_id": "e1", "source": "n1", "target": "n2", "relation_type": "关系类型", "confidence": 0.9, "evidence": "原文证据"}\n'
+    "  ]\n"
+    "}\n\n"
+    "示例：\n"
+    f"输出：{_FEWSHOT_PROPOSITION_OUTPUT}"
+)
 
 # ── Stage prompts ──
 
@@ -215,6 +414,8 @@ def _validate_and_sanitize(raw: dict) -> dict:
     # ── Validate nodes ──
     valid_temp_ids: set[str] = set()
     clean_nodes: list[dict[str, Any]] = []
+    parent_claim_ids: set[str] = set()  # 用于校验 proposition 的 parent_claim_id
+    proposition_counts: dict[str, int] = {}  # 每个 claim 下的 proposition 计数
 
     for idx, node in enumerate(raw_nodes):
         if not isinstance(node, dict):
@@ -232,13 +433,53 @@ def _validate_and_sanitize(raw: dict) -> dict:
             continue
 
         temp_id = str(node["temp_id"])
-        valid_temp_ids.add(temp_id)
-        clean_nodes.append({
+
+        clean_node: dict[str, Any] = {
             "temp_id": temp_id,
             "node_type": node_type,
             "name": str(node["name"]),
             "description": str(node["description"]),
-        })
+        }
+
+        # ── Proposition 特殊校验 ──
+        if node_type == "proposition":
+            desc = clean_node["description"]
+            if len(desc) < 30:
+                errors.append(
+                    f"nodes[{idx}] proposition.description 长度 <30（标签化），skipped"
+                )
+                continue
+
+            parent = str(node.get("parent_claim_id", "")).strip()
+            if not parent:
+                # prompt 明确要求 parent_claim_id（"必须"），缺失则丢弃该命题
+                errors.append(
+                    f"nodes[{idx}] proposition 缺少 parent_claim_id，skipped"
+                )
+                continue
+            parent_claim_ids.add(parent)
+            current_count = proposition_counts.get(parent, 0)
+            if current_count >= 5:
+                errors.append(
+                    f"nodes[{idx}] claim '{parent}' 下 proposition 已达 5 个上限，skipped"
+                )
+                continue
+            proposition_counts[parent] = current_count + 1
+            clean_node["parent_claim_id"] = parent
+
+            # 透传 metadata（data_points/conditions/citations）
+            if isinstance(node.get("metadata"), dict):
+                clean_node["metadata"] = node["metadata"]
+
+        # ── Section 特殊处理（弱化：不强制 claims 字段，但允许）──
+        if node_type == "section" and isinstance(node.get("claims"), list):
+            clean_node["claims"] = node["claims"]
+
+        # 注册 temp_id 到 valid_temp_ids —— 注意必须在所有可能 continue
+        # （proposition 校验等）之后，否则被丢弃的节点会留下悬空 temp_id，
+        # 导致引用它们的 edge 误通过校验，产生 dangling edge。
+        valid_temp_ids.add(temp_id)
+        clean_nodes.append(clean_node)
 
     # ── Validate edges ──
     clean_edges: list[dict[str, Any]] = []
@@ -295,6 +536,37 @@ def _validate_and_sanitize(raw: dict) -> dict:
             "evidence": evidence,
         })
 
+    # ── 检查 proposition 的 parent_claim_id 是否指向有效 claim 节点 ──
+    # 警告只记录但不删除会让图谱悬空，所以这里做实际过滤
+    claim_temp_ids = {
+        n["temp_id"] for n in clean_nodes if n["node_type"] == "claim"
+    }
+    orphan_prop_ids: set[str] = set()
+    for parent in parent_claim_ids:
+        if parent not in claim_temp_ids:
+            errors.append(
+                f"proposition.parent_claim_id '{parent}' 未在 claim 节点中找到"
+            )
+            # 收集所有指向该无效 parent 的 proposition
+            orphan_prop_ids.update(
+                n["temp_id"] for n in clean_nodes
+                if n["node_type"] == "proposition"
+                and n.get("parent_claim_id") == parent
+            )
+
+    # 从 clean_nodes 中移除孤儿 proposition
+    if orphan_prop_ids:
+        clean_nodes = [n for n in clean_nodes if n["temp_id"] not in orphan_prop_ids]
+        # 从 clean_edges 中移除引用孤儿 proposition 的边
+        clean_edges = [
+            e for e in clean_edges
+            if e["source"] not in orphan_prop_ids
+            and e["target"] not in orphan_prop_ids
+        ]
+        errors.append(
+            f"已移除 {len(orphan_prop_ids)} 个孤儿 proposition 及其相关边"
+        )
+
     if errors:
         logger.warning("Graph extraction validation produced %d warning(s): %s", len(errors), "; ".join(errors))
 
@@ -328,6 +600,15 @@ def _calibrate_confidence(edges: list[dict], source_text: str) -> list[dict]:
 
 
 # ── Main extractor ──
+
+def _build_expand_prompt(title: str, content: str, skeleton: dict) -> str:
+    """Build the user prompt for the expand step."""
+    return (
+        f"文章标题：{title}\n\n文章内容：\n{content}\n\n"
+        f"骨架信息：\n{json.dumps(skeleton, ensure_ascii=False, indent=2)}\n\n"
+        "请基于以上骨架信息，展开为完整的知识图谱（nodes + edges）。"
+    )
+
 
 class GraphExtractor:
     """Multi-stage knowledge graph extractor with few-shot guidance."""
@@ -366,6 +647,130 @@ class GraphExtractor:
         result = _validate_and_sanitize({"summary": summary, "nodes": nodes, "edges": edges})
         logger.info("Extraction complete: %d nodes, %d edges", len(result["nodes"]), len(result["edges"]))
         return result
+
+    # ── Progressive extraction methods (2-step skeleton + expand) ──
+
+    async def run_skeleton(
+        self, title: str, content: str,
+        temperature: float = 0.3,
+        extra_instruction: str = "",
+    ) -> dict:
+        """Step 1: Extract article-level skeleton (summary, topic_tags, core_claims)."""
+        logger.info("Skeleton: Extracting article-level skeleton")
+        article_prompt = f"文章标题：{title}\n\n文章内容：\n{content}"
+
+        system = _SKELETON_SYSTEM
+        if extra_instruction:
+            system = system + "\n\n额外要求：\n" + extra_instruction
+
+        raw = await self._llm.generate_json(
+            system_prompt=system, user_prompt=article_prompt,
+            temperature=temperature,
+        )
+        skeleton = _parse_json_response(raw)
+        if not skeleton:
+            logger.warning("Skeleton extraction returned invalid response, using defaults")
+            skeleton = {}
+
+        skeleton.setdefault("summary", "")
+        skeleton.setdefault("topic_tags", [])
+        skeleton.setdefault("core_claims", [])
+
+        logger.info(
+            "Skeleton complete: %d topic_tags, %d core_claims",
+            len(skeleton["topic_tags"]),
+            len(skeleton["core_claims"]),
+        )
+        return skeleton
+
+    async def run_expand(
+        self, title: str, content: str, skeleton: dict,
+        temperature: float = 0.3,
+        extra_instruction: str = "",
+        mode: str = "standard",
+    ) -> dict:
+        """Step 2: Expand skeleton into full knowledge graph (nodes + edges).
+
+        mode:
+          - "standard": 现状（topic + claim + 实体节点）
+          - "proposition": 命题化（claim 节点下展开 3-7 个自包含命题节点）
+        """
+        if mode not in ("standard", "proposition"):
+            raise ValueError(f"Unknown extraction mode: {mode!r}. Must be 'standard' or 'proposition'.")
+        logger.info("Expand (mode=%s): Expanding skeleton into full graph", mode)
+        expand_prompt = _build_expand_prompt(title, content, skeleton)
+
+        if mode == "proposition":
+            system = _EXPAND_PROPOSITION_SYSTEM
+        else:
+            system = _EXPAND_SYSTEM
+        if extra_instruction:
+            system = system + "\n\n额外要求：\n" + extra_instruction
+
+        raw = await self._llm.generate_json(
+            system_prompt=system, user_prompt=expand_prompt,
+            temperature=temperature,
+        )
+        expanded = _parse_json_response(raw)
+        if not expanded:
+            logger.warning("Expand step returned invalid response, using defaults")
+            expanded = {}
+
+        expanded.setdefault("nodes", [])
+        expanded.setdefault("edges", [])
+
+        logger.info(
+            "Expand complete: %d nodes, %d edges",
+            len(expanded["nodes"]),
+            len(expanded["edges"]),
+        )
+        return expanded
+
+    async def run_expand_stream(
+        self, title: str, content: str, skeleton: dict,
+        mode: str = "standard",
+    ) -> AsyncGenerator[tuple[str, str], None]:
+        """Stream expand step, yielding (event, data) tuples.
+
+        Events:
+          - ("chunk", text)  — incremental LLM output
+          - ("done", json)   — final parsed result
+          - ("error", msg)   — on failure
+        """
+        if mode not in ("standard", "proposition"):
+            raise ValueError(f"Unknown extraction mode: {mode!r}. Must be 'standard' or 'proposition'.")
+        logger.info("Expand (stream, mode=%s): Expanding skeleton into full graph", mode)
+        expand_prompt = _build_expand_prompt(title, content, skeleton)
+
+        system = _EXPAND_PROPOSITION_SYSTEM if mode == "proposition" else _EXPAND_SYSTEM
+
+        accumulated: list[str] = []
+        try:
+            async for delta in self._llm.generate_stream(
+                prompt=expand_prompt, system=system
+            ):
+                accumulated.append(delta)
+                yield ("chunk", delta)
+        except Exception as exc:
+            logger.exception("Expand stream failed")
+            yield ("error", str(exc))
+            return
+
+        raw_text = "".join(accumulated)
+        parsed = _parse_json_response(raw_text)
+        if not parsed:
+            yield ("error", "Failed to parse LLM output as JSON")
+            return
+
+        parsed.setdefault("nodes", [])
+        parsed.setdefault("edges", [])
+
+        logger.info(
+            "Expand (stream) complete: %d nodes, %d edges",
+            len(parsed["nodes"]),
+            len(parsed["edges"]),
+        )
+        yield ("done", parsed)
 
     # ── Individual stage methods (callable independently) ──
 

@@ -53,6 +53,12 @@ class Node(Base):
     canonical_name = Column(Text)
     description = Column(Text)
     source_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"))
+    parent_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("nodes.id"),
+        nullable=True,
+        index=True,
+    )
     embedding = Column(Text)
     status = Column(Text, nullable=False, default="active")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

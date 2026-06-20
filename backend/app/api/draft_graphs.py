@@ -51,7 +51,7 @@ async def update_draft_graph(
     db: AsyncSession = Depends(get_db),
 ):
     service = DraftGraphService(db)
-    result = await service.update_draft_graph(draft_graph_id, data.graph_json.model_dump())
+    result = await service.update_draft_graph(draft_graph_id, data.graph_json)
     if not result:
         raise HTTPException(status_code=404, detail="Draft graph not found")
     return result

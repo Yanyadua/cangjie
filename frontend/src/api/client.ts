@@ -91,7 +91,7 @@ export async function applyClusteringProposal(proposalId: string): Promise<Apply
 
 // ── Global Graph ──
 
-export async function getGlobalGraph(filterType: 'all' | 'topic' | 'article' = 'all') {
+export async function getGlobalGraph(filterType: 'all' | 'topic' | 'article' | 'partition' = 'all') {
   const res = await api.get('/graph/global', { params: { filter_type: filterType } });
   return res.data;
 }
@@ -108,41 +108,84 @@ export async function getNodeDetail(nodeId: string) {
   return res.data;
 }
 
-// ── Extraction Stages ──
+// ── Extraction Steps ──
 
 export async function getExtractionStatus(documentId: string) {
   const res = await api.get(`/extraction/${documentId}/status`);
   return res.data;
 }
 
-export async function runStage1(documentId: string) {
-  const res = await api.post(`/extraction/${documentId}/stage1`);
+export async function runStep1(documentId: string) {
+  const res = await api.post(`/extraction/${documentId}/step1`);
   return res.data;
 }
 
-export async function saveStage1(documentId: string, data: unknown) {
-  const res = await api.put(`/extraction/${documentId}/stage1`, data);
+export async function saveStep1(documentId: string, data: unknown) {
+  const res = await api.put(`/extraction/${documentId}/step1`, data);
   return res.data;
 }
 
-export async function runStage2(documentId: string) {
-  const res = await api.post(`/extraction/${documentId}/stage2`);
+export async function runStep2(documentId: string) {
+  const res = await api.post(`/extraction/${documentId}/step2`);
   return res.data;
 }
 
-export async function saveStage2(documentId: string, data: unknown) {
-  const res = await api.put(`/extraction/${documentId}/stage2`, data);
+export async function saveStep2(documentId: string, data: unknown) {
+  const res = await api.put(`/extraction/${documentId}/step2`, data);
   return res.data;
 }
 
-export async function runStage3(documentId: string) {
-  const res = await api.post(`/extraction/${documentId}/stage3`);
-  return res.data;
-}
+export async function streamStep2(
+  documentId: string,
+  onChunk: (text: string) => void,
+  mode: 'standard' | 'proposition' = 'proposition',
+): Promise<{ session_id: string; step: number; mode: string; data: { nodes: unknown[]; edges: unknown[] } }> {
+  const url = mode === 'proposition'
+    ? `/api/extraction/${documentId}/step2/stream?mode=proposition`
+    : `/api/extraction/${documentId}/step2/stream`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream' },
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Stream failed: ${response.status}`);
+  }
 
-export async function saveStage3(documentId: string, data: unknown) {
-  const res = await api.put(`/extraction/${documentId}/stage3`, data);
-  return res.data;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: { session_id: string; step: number; mode: string; data: { nodes: unknown[]; edges: unknown[] } } | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      let msg;
+      try {
+        msg = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+      if (msg.type === 'chunk') {
+        onChunk(msg.text);
+      } else if (msg.type === 'done') {
+        result = msg.result;
+      } else if (msg.type === 'error') {
+        throw new Error(msg.message || 'Stream error');
+      }
+    }
+  }
+
+  if (!result) throw new Error('Stream ended without result');
+  return result;
 }
 
 export async function finalizeExtraction(documentId: string) {
@@ -167,4 +210,102 @@ export async function graphEnhancedSearch(query: string, topK = 10): Promise<Sea
 export async function askQuestion(question: string): Promise<AskResponse> {
   const res = await api.post<AskResponse>('/qa/ask', { question });
   return res.data;
+}
+
+// ── Partitions ──
+
+export async function listPartitions() {
+  const res = await api.get('/partitions');
+  return res.data;
+}
+
+export async function createPartition(name: string, description: string = '') {
+  const res = await api.post('/partitions', { name, description });
+  return res.data;
+}
+
+export async function updatePartition(partitionId: string, data: { name?: string; description?: string }) {
+  const res = await api.put(`/partitions/${partitionId}`, data);
+  return res.data;
+}
+
+export async function deletePartition(partitionId: string) {
+  const res = await api.delete(`/partitions/${partitionId}`);
+  return res.data;
+}
+
+export async function getPartitionChildren(partitionId: string) {
+  const res = await api.get(`/partitions/${partitionId}/children`);
+  return res.data;
+}
+
+export async function mergePartitions(sourceId: string, targetId: string) {
+  const res = await api.post('/partitions/merge', { source_id: sourceId, target_id: targetId });
+  return res.data;
+}
+
+export async function splitPartition(
+  partitionId: string,
+  topicIds: string[],
+  newPartitionName: string,
+  newPartitionDescription: string = '',
+) {
+  const res = await api.post(`/partitions/${partitionId}/split`, {
+    topic_ids: topicIds,
+    new_partition_name: newPartitionName,
+    new_partition_description: newPartitionDescription,
+  });
+  return res.data;
+}
+
+// ── Merge / Dedup ──
+
+export async function detectDuplicateTopics(threshold: number = 0.85) {
+  const res = await api.get('/graph/duplicates', { params: { threshold } });
+  return res.data;
+}
+
+export async function mergeNodes(sourceId: string, targetId: string) {
+  const res = await api.post('/graph/nodes/merge', { source_id: sourceId, target_id: targetId });
+  return res.data;
+}
+
+// ── Evaluation ──
+
+export async function runEvaluation(documentId: string, strategies: string[] = ['concise', 'standard', 'detailed']) {
+  const res = await api.post('/evaluation/run', { document_id: documentId, strategies });
+  return res.data;
+}
+
+// ── Phase 2: 文章子图下钻 ──
+
+export async function getArticleSubgraph(
+  articleId: string,
+  includeProposition = true,
+): Promise<{
+  article_id: string;
+  document_id: string;
+  nodes: Array<{
+    id: string;
+    node_type: string;
+    name: string;
+    description: string | null;
+    parent_node_id: string | null;
+    source_document_id: string | null;
+    status: string;
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    relation_type: string;
+    confidence: number;
+    evidence_text: string | null;
+    status: string;
+  }>;
+}> {
+  const url = `/api/graph/article/${articleId}?include_proposition=${includeProposition}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }

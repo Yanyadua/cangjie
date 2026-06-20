@@ -2,7 +2,14 @@ from __future__ import annotations
 from typing import Optional, Any
 from uuid import UUID
 from datetime import datetime
+from enum import Enum
 from pydantic import BaseModel, Field
+
+
+class ExtractionMode(str, Enum):
+    """抽取模式。Phase 2 起 proposition 为推荐默认。"""
+    STANDARD = "standard"
+    PROPOSITION = "proposition"
 
 
 # ── Node / Edge / Graph ──
@@ -10,13 +17,49 @@ from pydantic import BaseModel, Field
 NODE_TYPES = [
     "article", "concept", "claim", "topic", "person", "organization",
     "paper", "project", "framework", "tool", "method", "technology", "question", "chunk",
+    "partition",
+    "proposition", "section",
 ]
 
 RELATION_TYPES = [
     "related_to", "contains", "part_of", "supports", "contradicts",
     "depends_on", "implements", "improves", "causes", "compares_with",
     "derived_from", "used_for", "evidence_for", "mentions", "similar_to", "belongs_to",
+    "root", "tag",
 ]
+
+
+# ── Partition ──
+
+class PartitionCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+class PartitionUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class NodeMergeRequest(BaseModel):
+    source_id: str
+    target_id: str
+
+
+class PartitionMergeRequest(BaseModel):
+    source_id: str
+    target_id: str
+
+
+class PartitionSplitRequest(BaseModel):
+    topic_ids: list[str]
+    new_partition_name: str
+    new_partition_description: str = ""
+
+
+class EvaluationRunRequest(BaseModel):
+    document_id: str
+    strategies: list[str] = ["concise", "standard", "detailed"]
 
 
 class GraphNode(BaseModel):
@@ -86,7 +129,9 @@ class DraftGraphResponse(BaseModel):
 
 
 class DraftGraphUpdateRequest(BaseModel):
-    graph_json: GraphData
+    # 透传原始 dict，保留 draft 阶段的 snake_case + temp_id 格式，
+    # 避免 GraphData 校验破坏下游 graph_patch / clustering 对字段名的依赖。
+    graph_json: dict
 
 
 # ── Insertion Proposal ──

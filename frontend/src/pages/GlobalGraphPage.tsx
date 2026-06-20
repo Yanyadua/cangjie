@@ -2,23 +2,29 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GraphEditor from '../components/GraphEditor';
 import NodeInspector from '../components/NodeInspector';
-import { getGlobalGraph, getLocalGraph, getNodeDetail } from '../api/client';
+import { getGlobalGraph, getLocalGraph, getArticleSubgraph } from '../api/client';
 import { graphJsonToGraphData } from '../lib/graph-mappers';
 import { toErrorMessage } from '../lib/errors';
 import { nodeColorVar } from '@/lib/utils';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '../components/ui/sheet';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import type { GraphNode, GraphEdge, NodeType } from '../types/graph';
 
-type FilterType = 'all' | 'topic' | 'article';
+type FilterType = 'all' | 'topic' | 'article' | 'partition';
 
 const LEGEND_TYPES: NodeType[] = ['concept', 'topic', 'article', 'claim', 'question'];
+
+const FILTER_LABEL: Record<FilterType, string> = {
+  all: '全部',
+  topic: '主题',
+  article: '文章',
+  partition: '分区',
+};
 
 export default function GlobalGraphPage() {
   const navigate = useNavigate();
@@ -36,7 +42,7 @@ export default function GlobalGraphPage() {
     try {
       const result = await getGlobalGraph(ft);
       setGraphData(graphJsonToGraphData(result));
-    } catch (e) {
+    } catch (e: unknown) {
       setError(toErrorMessage(e));
     } finally {
       setLoading(false);
@@ -55,13 +61,8 @@ export default function GlobalGraphPage() {
 
     if (node.nodeType === 'article') {
       try {
-        const detail = await getNodeDetail(nodeId);
-        if (detail.source_document_id) {
-          const dgRes = await fetch(`/api/documents/${detail.source_document_id}/draft-graph`).then(r => r.json());
-          if (dgRes?.graph_json) {
-            setArticleGraph(graphJsonToGraphData(dgRes.graph_json));
-          }
-        }
+        const data = await getArticleSubgraph(nodeId);
+        setArticleGraph(graphJsonToGraphData(data));
       } catch { /* ignore */ }
     } else {
       try {
@@ -83,7 +84,7 @@ export default function GlobalGraphPage() {
         setError('未找到节点：' + searchQuery);
         await loadGlobalGraph(filterType);
       }
-    } catch (e) {
+    } catch {
       setError('未找到节点：' + searchQuery);
     } finally {
       setLoading(false);
@@ -98,10 +99,21 @@ export default function GlobalGraphPage() {
 
   const isEmpty = !loading && graphData.nodes.length === 0;
 
+  const topicCount = graphData.nodes.filter(n => n.nodeType === 'topic').length;
+  const articleCount = graphData.nodes.filter(n => n.nodeType === 'article').length;
+  const partitionCount = graphData.nodes.filter(n => n.nodeType === 'partition').length;
+
+  const filterCounts: Record<FilterType, number> = {
+    all: topicCount + articleCount,
+    topic: topicCount,
+    article: articleCount,
+    partition: partitionCount,
+  };
+
   return (
     <div className="relative h-[calc(100vh-56px)] w-full">
-      {/* Top bar: search + filter tabs */}
-      <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2">
+      {/* Top bar: search + filter buttons */}
+      <div className="absolute left-3 right-3 top-3 z-10 flex flex-wrap items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
           <Input
             value={searchQuery}
@@ -114,13 +126,18 @@ export default function GlobalGraphPage() {
             {loading ? '搜索中...' : '搜索'}
           </Button>
         </div>
-        <div className="flex items-center">
-          <Tabs value={filterType} onValueChange={(v) => setFilterType(v as FilterType)}>
-            <TabsList>
-              <TabsTrigger value="all">力导向</TabsTrigger>
-              <TabsTrigger value="topic">聚类</TabsTrigger>
-            </TabsList>
-          </Tabs>
+        {/* Type filter buttons */}
+        <div className="flex items-center gap-1">
+          {(['all', 'topic', 'article', 'partition'] as FilterType[]).map(ft => (
+            <Button
+              key={ft}
+              variant={filterType === ft ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilterType(ft)}
+            >
+              {FILTER_LABEL[ft]} ({filterCounts[ft]})
+            </Button>
+          ))}
         </div>
       </div>
 

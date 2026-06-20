@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getClusteringProposal, updateClusteringProposal, applyClusteringProposal } from '../api/client';
-import type { TagAction, ClusteringProposalJSON } from '../types/graph';
+import {
+  getClusteringProposal,
+  updateClusteringProposal,
+  applyClusteringProposal,
+  listPartitions,
+} from '../api/client';
+import type { TagAction, ClusteringProposalJSON, PartitionAction } from '../types/graph';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { EmptyState } from '../components/EmptyState';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { SELECT_CLASSNAME } from '../lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -39,14 +45,33 @@ export default function ClusteringProposalPage() {
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  // 分区选择 state
+  const [partitionMode, setPartitionMode] = useState<'auto' | 'match' | 'new'>('auto');
+  const [selectedPartitionId, setSelectedPartitionId] = useState<string>('');
+  const [newPartitionName, setNewPartitionName] = useState('');
+  const [newPartitionDesc, setNewPartitionDesc] = useState('');
+  const [allPartitions, setAllPartitions] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
     getClusteringProposal(id)
       .then((res) => {
         if (cancelled) return;
-        setProposal(res.proposal_json);
-        setEditedActions(res.proposal_json.tag_actions || []);
+        const pj = res.proposal_json as ClusteringProposalJSON;
+        setProposal(pj);
+        setEditedActions(pj.tag_actions || []);
+
+        // 初始化分区选择
+        const pa = pj.partition_action;
+        if (pa) {
+          if (pa.action === 'MATCH') {
+            setSelectedPartitionId(pa.target_partition_id || '');
+          } else if (pa.action === 'NEW') {
+            setNewPartitionName(pa.proposed_name || '');
+            setNewPartitionDesc(pa.proposed_description || '');
+          }
+        }
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -55,6 +80,14 @@ export default function ClusteringProposalPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
+    // 加载所有分区列表（供手动选择）
+    listPartitions()
+      .then((data) => {
+        if (!cancelled) setAllPartitions(data || []);
+      })
+      .catch(() => {});
+
     return () => { cancelled = true; };
   }, [id]);
 
@@ -92,18 +125,50 @@ export default function ClusteringProposalPage() {
     setProposal(prev => prev ? { ...prev, topic_edges: prev.topic_edges.filter((_, i) => i !== idx) } : prev);
   };
 
-  // I5: Split state — `proposal` holds topic_edges + metadata (editable via setProposal),
-  // while `editedActions` holds tag_actions (editable separately via setEditedActions).
-  // On apply, we merge editedActions back into the proposal before sending.
+  const buildFinalPartitionAction = (): PartitionAction | undefined => {
+    if (!proposal?.partition_action) return undefined;
+    const base = proposal.partition_action;
+    if (partitionMode === 'auto') return base;
+    if (partitionMode === 'match') {
+      if (!selectedPartitionId) return { ...base, action: 'MATCH' as const, target_partition_id: '', target_partition_name: '' };
+      const target = allPartitions.find(p => p.id === selectedPartitionId);
+      return {
+        ...base,
+        action: 'MATCH' as const,
+        target_partition_id: selectedPartitionId,
+        target_partition_name: target?.name || '',
+      };
+    }
+    // new
+    return {
+      ...base,
+      action: 'NEW' as const,
+      proposed_name: newPartitionName.trim(),
+      proposed_description: newPartitionDesc,
+    };
+  };
+
   const handleApply = async () => {
     if (!id || !proposal) return;
     setApplying(true);
     setError('');
     try {
-      const updated = { ...proposal, tag_actions: editedActions };
+      const finalPA = buildFinalPartitionAction();
+      const updated = {
+        ...proposal,
+        partition_action: finalPA || proposal.partition_action,
+        tag_actions: editedActions,
+      };
       await updateClusteringProposal(id, updated);
       const result = await applyClusteringProposal(id);
       if (result.status === 'applied') {
+        const counts = result.knowledge_nodes_created || {};
+        const summary = Object.entries(counts)
+          .map(([type, n]) => `${type}: ${n}`)
+          .join('，');
+        alert(
+          `应用成功\n\n入库统计：\n${summary || '无知识节点'}\n知识边：${result.knowledge_edges_created || 0}`
+        );
         navigate('/graph');
       } else {
         setError('应用失败: ' + JSON.stringify(result.errors || result.error));
@@ -135,6 +200,8 @@ export default function ClusteringProposalPage() {
   const mergeCount = editedActions.filter(a => a.action === 'MERGE').length;
   const newCount = editedActions.filter(a => a.action === 'NEW').length;
   const totalActions = editedActions.length;
+
+  const pa = proposal.partition_action;
 
   return (
     <div className="mx-auto max-w-[880px] p-6">
@@ -181,6 +248,103 @@ export default function ClusteringProposalPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 分区归属卡片 */}
+      {pa && (
+        <Card className="mb-5">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base">分区归属</CardTitle>
+              {pa.action === 'NEW' && (
+                <Badge variant="secondary" className={NEW_BADGE_CLASS}>建议新建分区</Badge>
+              )}
+              {pa.action === 'MATCH' && (
+                <Badge variant="secondary" className="bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                  匹配到「{pa.target_partition_name}」({(pa.score * 100).toFixed(0)}%)
+                </Badge>
+              )}
+            </div>
+            {pa.reason && (
+              <CardDescription>{pa.reason}</CardDescription>
+            )}
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {/* 模式切换 */}
+            <div className="flex gap-2">
+              {([
+                { key: 'auto', label: '按建议' },
+                { key: 'match', label: '挂载已有' },
+                { key: 'new', label: '新建分区' },
+              ] as const).map(({ key, label }) => (
+                <Button
+                  key={key}
+                  variant={partitionMode === key ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPartitionMode(key)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            {/* auto 模式 */}
+            {partitionMode === 'auto' && pa.action === 'MATCH' && (
+              <div className="text-sm text-text">→ {pa.target_partition_name}</div>
+            )}
+            {partitionMode === 'auto' && pa.action === 'NEW' && (
+              <div className="text-sm text-text">
+                → 新建「{pa.proposed_name}」
+                {pa.proposed_description && <span className="text-text-muted"> — {pa.proposed_description}</span>}
+              </div>
+            )}
+
+            {/* match 模式 */}
+            {partitionMode === 'match' && (
+              <select
+                value={selectedPartitionId}
+                onChange={e => setSelectedPartitionId(e.target.value)}
+                className={SELECT_CLASSNAME}
+              >
+                <option value="">请选择分区...</option>
+                {allPartitions.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+
+            {/* new 模式 */}
+            {partitionMode === 'new' && (
+              <div className="flex flex-col gap-2">
+                <Input
+                  value={newPartitionName}
+                  onChange={e => setNewPartitionName(e.target.value)}
+                  placeholder="分区名（如：智能体）"
+                  aria-label="分区名"
+                />
+                <Input
+                  value={newPartitionDesc}
+                  onChange={e => setNewPartitionDesc(e.target.value)}
+                  placeholder="分区描述..."
+                  aria-label="分区描述"
+                  className="text-sm"
+                />
+              </div>
+            )}
+
+            {/* 候选列表 */}
+            {pa.candidates?.length > 0 && partitionMode !== 'new' && (
+              <div className="mt-1">
+                <div className="mb-1 text-xs text-text-subtle">其他候选分区:</div>
+                {pa.candidates.map(c => (
+                  <div key={c.id} className="text-xs text-text-muted">
+                    {c.name} — {(c.score * 100).toFixed(0)}%
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tag Actions */}
       <div className="mb-6 flex flex-col gap-3">

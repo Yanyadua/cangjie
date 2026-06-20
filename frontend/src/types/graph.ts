@@ -12,7 +12,10 @@ export type NodeType =
   | 'method'
   | 'technology'
   | 'question'
-  | 'chunk';
+  | 'chunk'
+  | 'partition'
+  | 'proposition'
+  | 'section';
 
 export type RelationType =
   | 'tag'
@@ -31,7 +34,8 @@ export type RelationType =
   | 'evidence_for'
   | 'mentions'
   | 'similar_to'
-  | 'belongs_to';
+  | 'belongs_to'
+  | 'root';
 
 export type GraphNode = {
   id: string;
@@ -56,6 +60,39 @@ export type GraphData = {
   summary?: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+};
+
+export type TopicTag = {
+  name: string;
+  confidence?: number;
+};
+
+export type CoreClaim = {
+  name: string;
+  description: string;
+};
+
+export type SkeletonData = {
+  summary: string;
+  topic_tags: TopicTag[];
+  core_claims: CoreClaim[];
+};
+
+export type ExpandedData = {
+  nodes: Array<{
+    temp_id: string;
+    node_type: NodeType;
+    name: string;
+    description: string;
+  }>;
+  edges: Array<{
+    temp_id: string;
+    source: string;
+    target: string;
+    relation_type: RelationType;
+    confidence: number;
+    evidence: string;
+  }>;
 };
 
 export type DocumentResponse = {
@@ -105,6 +142,21 @@ export type InsertionProposalResponse = {
 
 // ── Clustering Proposal ──
 
+export type PartitionAction = {
+  action: 'MATCH' | 'NEW';
+  target_partition_id?: string;
+  target_partition_name?: string;
+  proposed_name?: string;
+  proposed_description?: string;
+  score: number;
+  candidates: Array<{
+    id: string;
+    name: string;
+    score: number;
+  }>;
+  reason: string;
+};
+
 export type TagAction = {
   tag_name: string;
   action: 'MERGE' | 'NEW';
@@ -131,6 +183,7 @@ export type ClusteringProposalJSON = {
   article_title: string;
   article_summary: string;
   document_id: string;
+  partition_action: PartitionAction;
   tag_actions: TagAction[];
   topic_edges: TopicEdgeProposal[];
 };
@@ -164,7 +217,7 @@ export const NODE_COLORS: Record<string, string> = {
   concept: '#10b981',
   claim: '#f97316',
   topic: '#8b5cf6',
-  person: '#ef4444',
+  person: '#fbbf24',
   organization: '#6366f1',
   paper: '#0ea5e9',
   project: '#14b8a6',
@@ -174,15 +227,20 @@ export const NODE_COLORS: Record<string, string> = {
   technology: '#22c55e',
   question: '#a855f7',
   chunk: '#94a3b8',
+  partition: '#6366f1',
+  proposition: '#d946ef',
+  section: '#cbd5e1',
 };
 
 export const NODE_TYPES: NodeType[] = [
   'article', 'concept', 'claim', 'topic', 'person', 'organization',
   'paper', 'project', 'framework', 'tool', 'method', 'technology', 'question',
+  'partition', 'proposition', 'section',
 ];
 
 export const RELATION_TYPES: RelationType[] = [
   'tag', 'related_to', 'contains', 'part_of', 'supports', 'contradicts',
   'depends_on', 'implements', 'improves', 'causes', 'compares_with',
   'derived_from', 'used_for', 'evidence_for', 'mentions', 'similar_to', 'belongs_to',
+  'root',
 ];
