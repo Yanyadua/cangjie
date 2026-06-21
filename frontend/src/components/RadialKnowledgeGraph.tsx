@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { nodeColorVar } from '@/lib/utils';
+import { computeRadialLayout } from '@/lib/radial-layout';
 import type { RadialNodeData, RadialNode } from '@/lib/radial-layout';
 import type { GraphNode, GraphEdge } from '../types/graph';
 
@@ -101,12 +102,17 @@ export type RadialGraphProps = {
 export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialGraphProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set());
 
-  // Task 4 will replace this with real layout
-  useMemo(() => {
-    setNodes([]);
-    setEdges([]);
-  }, [graphData, setNodes, setEdges]);
+  const { nodes: laidOutNodes, edges: laidOutEdges } = useMemo(
+    () => computeRadialLayout(graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick),
+    [graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick],
+  );
+
+  useEffect(() => {
+    setNodes(laidOutNodes);
+    setEdges(laidOutEdges);
+  }, [laidOutNodes, laidOutEdges, setNodes, setEdges]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
