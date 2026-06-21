@@ -9,6 +9,7 @@ import type { NodeType, RelationType } from '../types/graph';
 import { NODE_TYPES, RELATION_TYPES, NODE_COLORS } from '../types/graph';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SELECT_CLASSNAME } from '../lib/utils';
 import { toErrorMessage } from '../lib/errors';
@@ -227,8 +228,8 @@ export default function ExtractionWizardPage() {
           {/* Summary */}
           <div className="mb-4">
             <label className="mb-1 block text-sm font-medium text-text">文章摘要</label>
-            <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={3}
-              className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-text" />
+            <Textarea value={summary} onChange={e => setSummary(e.target.value)} rows={3}
+              className="resize-y" />
           </div>
 
           {/* Topic Tags */}
@@ -331,9 +332,9 @@ export default function ExtractionWizardPage() {
                   <option value="">选择目标节点</option>
                   {nodes.map(n => <option key={n.temp_id} value={n.temp_id}>{n.name}</option>)}
                 </select>
-                <input type="number" min={0} max={1} step={0.05} value={e.confidence}
+                <Input type="number" min={0} max={1} step={0.05} value={e.confidence}
                   onChange={ev => updateEdge(idx, 'confidence', parseFloat(ev.target.value))}
-                  className="w-[60px] rounded-md border border-border bg-surface px-2 py-1.5 text-center text-xs text-text" />
+                  className="w-[60px] text-center text-xs" />
                 <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => removeEdge(idx)}>删除</Button>
               </div>
               <Input value={e.evidence} onChange={ev => updateEdge(idx, 'evidence', ev.target.value)} placeholder="证据（引用原文）" className="text-xs" />

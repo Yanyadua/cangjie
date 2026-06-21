@@ -79,7 +79,7 @@ export default function InsertionProposalPage() {
 
   return (
     <div className="mx-auto max-w-[880px] p-6">
-      <h2 className="mb-2 text-2xl font-bold text-text">插入建议</h2>
+      <h2 className="mb-2 text-xl font-semibold text-text">插入建议</h2>
       <p className="mb-5 text-sm text-text-muted">
         系统根据新文章内容，在全局知识库中找到了以下连接建议。请检查后确认。
       </p>

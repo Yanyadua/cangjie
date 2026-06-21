@@ -16,107 +16,52 @@ import {
   BackgroundVariant,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import dagre from '@dagrejs/dagre';
 import type { GraphNode, GraphEdge } from '../types/graph';
 import { nodeColorVar } from '@/lib/utils';
 
-// ── Force-directed layout ──
+// ── Dagre hierarchical layout ──
 
-type Vec2 = { x: number; y: number };
-
-function forceLayout(
+function dagreLayout(
   nodes: Node<CustomNodeData>[],
   edges: Edge[],
+  direction: 'LR' | 'TB' = 'LR',
 ): Node<CustomNodeData>[] {
   if (nodes.length === 0) return [];
 
-  const n = nodes.length;
-  const pos: Vec2[] = nodes.map((_, i) => ({
-    x: 400 + Math.cos((2 * Math.PI * i) / n) * (150 + n * 10),
-    y: 300 + Math.sin((2 * Math.PI * i) / n) * (150 + n * 10),
-  }));
+  const NODE_W = 160;
+  const NODE_H = 60;
 
-  // Build adjacency for fast lookup
-  const adj = new Map<string, Set<string>>();
-  for (const node of nodes) adj.set(node.id, new Set());
-  for (const e of edges) {
-    adj.get(e.source)?.add(e.target);
-    adj.get(e.target)?.add(e.source);
-  }
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: direction,
+    ranksep: 100,
+    nodesep: 40,
+    marginx: 20,
+    marginy: 20,
+  });
+  g.setDefaultEdgeLabel(() => ({}));
 
-  const REPULSION = 8000;
-  const ATTRACTION = 0.005;
-  const IDEAL_EDGE_LEN = 180;
-  const DAMPING = 0.85;
-  const ITERATIONS = 120;
-
-  const vel: Vec2[] = nodes.map(() => ({ x: 0, y: 0 }));
-
-  for (let iter = 0; iter < ITERATIONS; iter++) {
-    const temp = 1 - iter / ITERATIONS; // cooling
-
-    // Repulsion: all pairs
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const dx = pos[i].x - pos[j].x;
-        const dy = pos[i].y - pos[j].y;
-        const dist = Math.sqrt(dx * dx + dy * dy) + 1;
-        const force = (REPULSION / (dist * dist)) * temp;
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        vel[i].x += fx;
-        vel[i].y += fy;
-        vel[j].x -= fx;
-        vel[j].y -= fy;
-      }
+  nodes.forEach(n => g.setNode(n.id, { width: NODE_W, height: NODE_H }));
+  edges.forEach(e => {
+    if (g.hasNode(e.source) && g.hasNode(e.target)) {
+      g.setEdge(e.source, e.target);
     }
+  });
 
-    // Attraction: connected pairs
-    for (const e of edges) {
-      const si = nodes.findIndex(nd => nd.id === e.source);
-      const ti = nodes.findIndex(nd => nd.id === e.target);
-      if (si < 0 || ti < 0) continue;
-      const dx = pos[ti].x - pos[si].x;
-      const dy = pos[ti].y - pos[si].y;
-      const dist = Math.sqrt(dx * dx + dy * dy) + 1;
-      const force = (dist - IDEAL_EDGE_LEN) * ATTRACTION * temp;
-      const fx = (dx / dist) * force;
-      const fy = (dy / dist) * force;
-      vel[si].x += fx;
-      vel[si].y += fy;
-      vel[ti].x -= fx;
-      vel[ti].y -= fy;
-    }
+  dagre.layout(g);
 
-    // Center gravity (mild pull toward center)
-    for (let i = 0; i < n; i++) {
-      vel[i].x += (400 - pos[i].x) * 0.001;
-      vel[i].y += (300 - pos[i].y) * 0.001;
-    }
-
-    // Apply velocity with damping
-    for (let i = 0; i < n; i++) {
-      vel[i].x *= DAMPING;
-      vel[i].y *= DAMPING;
-      pos[i].x += vel[i].x;
-      pos[i].y += vel[i].y;
-    }
-  }
-
-  // Normalize: shift so min is at 0,0
-  let minX = Infinity, minY = Infinity;
-  for (const p of pos) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-  }
-  for (const p of pos) {
-    p.x -= minX;
-    p.y -= minY;
-  }
-
-  return nodes.map((node, i) => ({
-    ...node,
-    position: { x: Math.round(pos[i].x), y: Math.round(pos[i].y) },
-  }));
+  return nodes.map(node => {
+    const pos = g.node(node.id);
+    if (!pos) return node;
+    return {
+      ...node,
+      position: {
+        x: Math.round(pos.x - NODE_W / 2),
+        y: Math.round(pos.y - NODE_H / 2),
+      },
+    };
+  });
 }
 
 // ── Custom Node ──
@@ -202,21 +147,46 @@ export default function GraphEditor({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Sync external data changes + apply force layout
+  // Signature-based layout trigger: only re-layout when nodes/edges are added/removed
+  const nodeSig = useMemo(
+    () => graphData.nodes.map(n => n.id).sort().join(','),
+    [graphData.nodes],
+  );
+  const edgeSig = useMemo(
+    () => graphData.edges.map(e => `${e.source}->${e.target}`).sort().join('|'),
+    [graphData.edges],
+  );
+
   React.useEffect(() => {
     if (graphData.nodes.length === 0) {
       setNodes([]);
       setEdges([]);
       return;
     }
-    const flowNodes = graphData.nodes.map((n) => graphNodeToFlowNode(n, onNodeClick));
+    const flowNodes = graphData.nodes.map(n => graphNodeToFlowNode(n, onNodeClick));
     const flowEdges = graphData.edges.map(graphEdgeToFlowEdge);
-
-    const laidOut = forceLayout(flowNodes, flowEdges);
-
+    const laidOut = dagreLayout(flowNodes, flowEdges);
     setNodes(laidOut);
     setEdges(flowEdges);
-  }, [graphData, onNodeClick, setNodes, setEdges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeSig, edgeSig]);
+
+  // Data sync: update node content (label/type/onSelect) without re-layout
+  React.useEffect(() => {
+    setNodes(prev => prev.map(node => {
+      const gn = graphData.nodes.find(n => n.id === node.id);
+      if (!gn) return node;
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          label: gn.name,
+          nodeType: gn.nodeType,
+          onSelect: onNodeClick ? () => onNodeClick(gn.id) : node.data.onSelect,
+        },
+      };
+    }));
+  }, [graphData.nodes, onNodeClick, setNodes]);
 
   const onConnect = useCallback(
     (connection: Connection) => {

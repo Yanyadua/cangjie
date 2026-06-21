@@ -107,10 +107,17 @@ Step2 展开支持流式传输，全链路：
 ## 用户偏好
 
 - **所有方案文档用中文**：设计文档、方案描述、注释说明等一律使用中文
+- **MCP 工具全部使用 z.ai 的**：web_search / webReader / understand_image / analyze_image 等，优先调用 `mcp__MiniMax__*`、`mcp__web_reader__*`、`mcp__4_5v_mcp__*`，不要用其他来源的同类型工具
 
 ## 关键设计决策
 
 - **人工校正优先**：每个自动化步骤都有对应的人工编辑界面，DraftGraph 状态机让用户可在任意阶段回退修改
 - **temp_id 解耦**：抽取阶段节点用 `temp_id`（如 `n1`/`n_${timestamp}`），入库时才分配真实 UUID，便于前端增删
 - **证据驱动**：每条 edge 必须有 evidence（引用原文），`_calibrate_confidence` 据此调整可信度
-- **全局图只存 topic + article 节点**：`/graph/global` 默认过滤只展示宏观结构，避免节点爆炸
+- **全局知识图谱严格 4 层层级**：
+  - L0：`person ("我")` — 图谱核心
+  - L1：`partition` — 个人延伸出的所有领域分区，边 `person --root--> partition`
+  - L2：`topic` — 每个分区下的主题，边 `topic --part_of--> partition`（**每个 topic 必挂一个 partition**）
+  - L3：`article` — 每个主题下的文章，边 `article --tag--> topic`（**文章只通过 topic 接入层级，不直接连 partition**）
+  - 横向：`topic --related_to/contains/part_of--> topic` 是 L2 内的语义关联，不破坏层级
+  - **已知违背**：当前 `clustering_service.py:257-269` 仍会建一条 `article --belongs_to--> partition` 直连边，违反"文章不直接连 partition"原则，待清理

@@ -45,7 +45,7 @@ export default function ImportPage() {
 
   return (
     <div className="mx-auto max-w-[880px] p-6">
-      <h2 className="mb-5 text-2xl font-bold text-text">导入文章</h2>
+      <h2 className="mb-5 text-xl font-semibold text-text">导入文章</h2>
 
       {error && (
         <Alert variant="destructive" className="mb-4">

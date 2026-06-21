@@ -21,7 +21,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { SELECT_CLASSNAME } from '../lib/utils';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -183,7 +185,7 @@ export default function ClusteringProposalPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-[880px] p-6">
+      <div className="mx-auto h-full max-w-[880px] overflow-y-auto p-6">
         <LoadingSkeleton count={4} />
       </div>
     );
@@ -191,7 +193,7 @@ export default function ClusteringProposalPage() {
 
   if (!proposal) {
     return (
-      <div className="mx-auto max-w-[880px] p-6">
+      <div className="mx-auto h-full max-w-[880px] overflow-y-auto p-6">
         <EmptyState title="未找到聚类提案" hint="该提案可能已被处理或链接有误" />
       </div>
     );
@@ -204,10 +206,10 @@ export default function ClusteringProposalPage() {
   const pa = proposal.partition_action;
 
   return (
-    <div className="mx-auto max-w-[880px] p-6">
+    <div className="mx-auto h-full max-w-[880px] overflow-y-auto p-6">
       {/* Header */}
       <div className="mb-5">
-        <h2 className="mb-1 text-2xl font-bold text-text">主题聚类提案</h2>
+        <h2 className="mb-1 text-xl font-semibold text-text">主题聚类提案</h2>
         <div className="text-sm font-semibold text-text">{proposal.article_title}</div>
         {proposal.article_summary && (
           <div className="mt-1 text-sm text-text-muted">{proposal.article_summary}</div>
@@ -300,16 +302,19 @@ export default function ClusteringProposalPage() {
 
             {/* match 模式 */}
             {partitionMode === 'match' && (
-              <select
+              <Select
                 value={selectedPartitionId}
-                onChange={e => setSelectedPartitionId(e.target.value)}
-                className={SELECT_CLASSNAME}
+                onValueChange={setSelectedPartitionId}
               >
-                <option value="">请选择分区...</option>
-                {allPartitions.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="请选择分区..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {allPartitions.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
 
             {/* new 模式 */}

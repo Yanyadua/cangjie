@@ -205,7 +205,7 @@ export default function HistoryPage() {
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-bold text-text">历史文章 ({documents.length})</h2>
+        <h2 className="text-xl font-semibold text-text">历史文章 ({documents.length})</h2>
         <div className="flex items-center gap-2">
           <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
             <TabsList>
