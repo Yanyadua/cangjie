@@ -243,6 +243,41 @@ class GraphStore:
         await self.db.flush()
         return me_id
 
+    async def attach_orphan_partitions(self, me_id: UUID) -> int:
+        """为所有无 root 入边的 partition 补建 person --root--> partition 边。
+
+        返回新建的边数。用于一次性修复存量孤悬分区，使径向图谱层级完整。
+        """
+        result = await self.db.execute(
+            select(Node).where(
+                and_(Node.node_type == "partition", Node.status == "active")
+            )
+        )
+        partitions = result.scalars().all()
+
+        created = 0
+        for p in partitions:
+            existing = await self.db.execute(
+                select(Edge).where(
+                    and_(
+                        Edge.target_node_id == p.id,
+                        Edge.relation_type == "root",
+                    )
+                ).limit(1)
+            )
+            if existing.scalar_one_or_none():
+                continue
+            await self.create_edge(
+                source_id=me_id,
+                target_id=p.id,
+                relation_type="root",
+                confidence=1.0,
+            )
+            created += 1
+        if created:
+            await self.db.flush()
+        return created
+
     async def detect_duplicate_topics(self, threshold: float = 0.85) -> List[dict]:
         """检测全局图谱中语义相似的 topic 节点对。
 

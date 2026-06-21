@@ -100,3 +100,39 @@ async def test_get_article_subgraph_not_found(db_session):
     store = GraphStore(db_session)
     result = await store.get_article_subgraph(uuid4())
     assert result is None
+
+
+async def test_attach_orphan_partitions_links_rootless_partitions(db_session):
+    """attach_orphan_partitions 为所有无 root 入边的 partition 建 root 边。"""
+    store = GraphStore(db_session)
+
+    me_id = await store.ensure_me_node()
+    # 建 2 个 partition，其中只一个预先挂 root
+    attached_id = await store.create_node(node_type="partition", name="挂上的")
+    orphan_id = await store.create_node(node_type="partition", name="孤悬的")
+    await store.create_edge(
+        source_id=me_id, target_id=attached_id,
+        relation_type="root", confidence=1.0,
+    )
+
+    # 执行修复
+    await store.attach_orphan_partitions(me_id)
+
+    # 验证：orphan 现在有 root 入边，attached 不重复建
+    from sqlalchemy import select
+    from app.models.db_models import Edge
+    result = await db_session.execute(
+        select(Edge).where(
+            Edge.relation_type == "root",
+            Edge.target_node_id == orphan_id,
+        )
+    )
+    assert result.scalar_one_or_none() is not None
+
+    result2 = await db_session.execute(
+        select(Edge).where(
+            Edge.relation_type == "root",
+            Edge.target_node_id == attached_id,
+        )
+    )
+    assert len(result2.scalars().all()) == 1  # 没重复
