@@ -1,46 +1,38 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import RadialKnowledgeGraph from '../components/RadialKnowledgeGraph';
 import GraphEditor from '../components/GraphEditor';
-import NodeInspector from '../components/NodeInspector';
-import { getGlobalGraph, getLocalGraph, getArticleSubgraph } from '../api/client';
+import { getGlobalGraph, getArticleSubgraph } from '../api/client';
 import { graphJsonToGraphData } from '../lib/graph-mappers';
 import { toErrorMessage } from '../lib/errors';
-import { nodeColorVar } from '@/lib/utils';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '../components/ui/sheet';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
-import type { GraphNode, GraphEdge, NodeType } from '../types/graph';
+import type { GraphNode, GraphEdge } from '../types/graph';
 
-type FilterType = 'all' | 'topic' | 'article' | 'partition';
-
-const LEGEND_TYPES: NodeType[] = ['concept', 'topic', 'article', 'claim', 'question'];
-
-const FILTER_LABEL: Record<FilterType, string> = {
-  all: '全部',
-  topic: '主题',
-  article: '文章',
-  partition: '分区',
-};
+const LEGEND = [
+  { label: '我', color: 'var(--node-person)' },
+  { label: '分区', color: 'var(--node-partition)' },
+  { label: '主题', color: 'var(--node-topic)' },
+  { label: '文章', color: 'var(--node-article)' },
+];
 
 export default function GlobalGraphPage() {
   const navigate = useNavigate();
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
-  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [selectedArticle, setSelectedArticle] = useState<GraphNode | null>(null);
   const [articleGraph, setArticleGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadGlobalGraph = useCallback(async (ft: FilterType) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await getGlobalGraph(ft);
+      const result = await getGlobalGraph('partition');
       setGraphData(graphJsonToGraphData(result));
     } catch (e: unknown) {
       setError(toErrorMessage(e));
@@ -49,176 +41,84 @@ export default function GlobalGraphPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadGlobalGraph(filterType);
-  }, [filterType, loadGlobalGraph]);
+  useEffect(() => { load(); }, [load]);
 
   const handleNodeClick = useCallback(async (nodeId: string) => {
     const node = graphData.nodes.find(n => n.id === nodeId);
     if (!node) return;
-    setSelectedNode(node);
-    setArticleGraph(null);
-
     if (node.nodeType === 'article') {
+      setSelectedArticle(node);
+      setArticleGraph(null);
       try {
         const data = await getArticleSubgraph(nodeId);
         setArticleGraph(graphJsonToGraphData(data));
-      } catch { /* ignore */ }
-    } else {
-      try {
-        const result = await getLocalGraph(nodeId, 1);
-        setGraphData(graphJsonToGraphData(result));
-      } catch { /* ignore */ }
+      } catch { /* ignore subgraph fetch errors */ }
     }
   }, [graphData.nodes]);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await getLocalGraph(searchQuery, 2);
-      if (result.nodes?.length > 0) {
-        setGraphData(graphJsonToGraphData(result));
-      } else {
-        setError('未找到节点：' + searchQuery);
-        await loadGlobalGraph(filterType);
-      }
-    } catch {
-      setError('未找到节点：' + searchQuery);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSheetOpenChange = (open: boolean) => {
-    if (!open) {
-      setSelectedNode(null);
-    }
+    if (!open) setSelectedArticle(null);
   };
 
   const isEmpty = !loading && graphData.nodes.length === 0;
 
-  const topicCount = graphData.nodes.filter(n => n.nodeType === 'topic').length;
-  const articleCount = graphData.nodes.filter(n => n.nodeType === 'article').length;
-  const partitionCount = graphData.nodes.filter(n => n.nodeType === 'partition').length;
-
-  const filterCounts: Record<FilterType, number> = {
-    all: topicCount + articleCount,
-    topic: topicCount,
-    article: articleCount,
-    partition: partitionCount,
-  };
-
   return (
     <div className="relative h-[calc(100vh-56px)] w-full">
-      {/* Top bar: search + filter buttons */}
-      <div className="absolute left-3 right-3 top-3 z-10 flex flex-wrap items-center gap-2">
-        <div className="flex flex-1 items-center gap-2">
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索节点..."
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            className="max-w-xs bg-surface"
-          />
-          <Button onClick={handleSearch} disabled={loading} size="sm">
-            {loading ? '搜索中...' : '搜索'}
-          </Button>
-        </div>
-        {/* Type filter buttons */}
-        <div className="flex items-center gap-1">
-          {(['all', 'topic', 'article', 'partition'] as FilterType[]).map(ft => (
-            <Button
-              key={ft}
-              variant={filterType === ft ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilterType(ft)}
-            >
-              {FILTER_LABEL[ft]} ({filterCounts[ft]})
-            </Button>
+      {/* Top-right legend (no filter buttons, no search yet — Task 9 will add search) */}
+      <Card className="absolute right-3 top-3 z-10 gap-0 py-2 shadow-md">
+        <CardContent className="flex items-center gap-3 px-3">
+          {LEGEND.map(l => (
+            <div key={l.label} className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: l.color }} />
+              <span className="text-xs text-text-muted">{l.label}</span>
+            </div>
           ))}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Loading overlay */}
       {loading && (
         <div className="flex h-full items-center justify-center pt-16">
-          <div className="w-full max-w-md p-6">
-            <LoadingSkeleton count={4} />
-          </div>
+          <div className="w-full max-w-md p-6"><LoadingSkeleton count={4} /></div>
         </div>
       )}
 
-      {/* Error state (when no graph data loaded) */}
       {error && isEmpty && !loading && (
         <div className="flex h-full items-center justify-center pt-16">
           <div className="w-full max-w-md p-6">
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
             <div className="mt-4 flex justify-center">
-              <Button onClick={() => loadGlobalGraph(filterType)} variant="outline" size="sm">
-                重试
-              </Button>
+              <Button onClick={load} variant="outline" size="sm">重试</Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Empty state (only when no error) */}
       {isEmpty && !error && !loading && (
         <div className="flex h-full items-center justify-center pt-16">
           <EmptyState
-            title="知识库还是空的"
+            title="你的知识图谱还是空的"
+            hint="导入第一篇文章，系统会自动为你构建知识网络。"
             action={<Button onClick={() => navigate('/import')}>去导入</Button>}
           />
         </div>
       )}
 
-      {/* Canvas */}
       {!loading && !isEmpty && (
-        <>
-          <GraphEditor graphData={graphData} editable={false} onNodeClick={handleNodeClick} />
-
-          {/* Error banner — floating top-center over canvas (partial load) */}
-          {error && (
-            <div className="absolute left-1/2 top-16 z-20 w-full max-w-md -translate-x-1/2 px-4">
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            </div>
-          )}
-
-          {/* Bottom-left legend */}
-          <Card className="absolute bottom-4 left-4 z-10 gap-0 py-3 shadow-md">
-            <CardContent className="flex flex-col gap-1.5 px-4">
-              {LEGEND_TYPES.map((type) => (
-                <div key={type} className="flex items-center gap-2">
-                  <span
-                    className="h-3 w-3 rounded-sm"
-                    style={{ background: nodeColorVar(type) }}
-                  />
-                  <span className="text-xs text-text-muted">{type}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </>
+        <RadialKnowledgeGraph graphData={graphData} onNodeClick={handleNodeClick} />
       )}
 
-      {/* Node detail Sheet */}
-      <Sheet open={selectedNode !== null} onOpenChange={handleSheetOpenChange}>
+      {/* Article inspector */}
+      <Sheet open={selectedArticle !== null} onOpenChange={handleSheetOpenChange}>
         <SheetContent side="right">
-          {selectedNode && (
+          {selectedArticle && (
             <>
               <SheetHeader>
-                <SheetTitle>{selectedNode.name}</SheetTitle>
-                <SheetDescription>{selectedNode.nodeType}</SheetDescription>
+                <SheetTitle>{selectedArticle.name}</SheetTitle>
+                <SheetDescription>文章</SheetDescription>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto">
-                {selectedNode.description && (
-                  <div className="mb-3 px-4 text-sm text-text-muted">{selectedNode.description}</div>
+                {selectedArticle.description && (
+                  <div className="mb-3 px-4 text-sm text-text-muted">{selectedArticle.description}</div>
                 )}
                 {articleGraph && (
                   <div className="mt-2 px-4">
@@ -227,9 +127,6 @@ export default function GlobalGraphPage() {
                       <GraphEditor graphData={articleGraph} editable={false} />
                     </div>
                   </div>
-                )}
-                {!articleGraph && (
-                  <NodeInspector node={selectedNode} editable={false} />
                 )}
               </div>
             </>
