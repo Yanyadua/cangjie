@@ -55,10 +55,12 @@ async def get_global_graph(
     elif filter_type == "partition":
         # 分区视图：展示 我 + 分区 + topic + article 的层级结构
         # 确保中心 person 节点存在，并为存量孤悬 partition 补建 root 边
+        had_person = any(n["node_type"] == "person" for n in all_nodes)
         me_id = await store.ensure_me_node()
-        await store.attach_orphan_partitions(me_id)
-        await db.commit()
-        all_nodes = await store.get_all_active_nodes()
+        created = await store.attach_orphan_partitions(me_id)
+        if created or not had_person:
+            await db.commit()
+            all_nodes = await store.get_all_active_nodes()
         nodes = [
             n for n in all_nodes
             if n["node_type"] in ("person", "partition", "topic", "article")
