@@ -6,10 +6,10 @@ from uuid import uuid4
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.orm.attributes import flag_modified
 
-from ..models.db_models import InsertionProposal, Document
+from ..models.db_models import InsertionProposal, Document, Edge
 from ..core.llm_client import LLMClient
 from ..core.embedding_client import EmbeddingClient
 from ..core.clustering_planner import ClusteringPlanner
@@ -198,6 +198,23 @@ class ClusteringService:
                     try:
                         from uuid import UUID
                         partition_id = UUID(target_id)
+                        # 确保 partition 挂到 person 中心（MATCH 模式以前漏建 root 边）
+                        existing_root = await self.db.execute(
+                            select(Edge).where(
+                                and_(
+                                    Edge.source_node_id == me_id,
+                                    Edge.target_node_id == partition_id,
+                                    Edge.relation_type == "root",
+                                )
+                            )
+                        )
+                        if not existing_root.scalar_one_or_none():
+                            await self.graph_store.create_edge(
+                                source_id=me_id,
+                                target_id=partition_id,
+                                relation_type="root",
+                                confidence=1.0,
+                            )
                         applied.append(f"MATCH partition: {partition_action.get('target_partition_name', '')}")
                     except Exception as e:
                         failed.append(f"Partition match: {e}")

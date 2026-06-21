@@ -274,3 +274,64 @@ async def test_generate_proposal_flat_draft_format_still_works(db_session):
     result = await svc.generate_proposal(doc.id, flat_graph)
     assert "error" not in result
     assert result["proposal_json"]["article_summary"] == "Flat summary"
+
+
+async def test_apply_proposal_match_creates_root_edge(db_session):
+    """MATCH partition_action 也应该建 person --root--> partition 边。
+
+    Bug 重现：MATCH 分支以前只记录 applied 不建 root 边，导致径向图谱中心断开。
+    """
+    from app.core.graph_store import GraphStore
+
+    # 预建目标 partition（模拟已存在的分区）
+    store = GraphStore(db_session)
+    target_id = await store.create_node(node_type="partition", name="已存在分区")
+
+    # 用标准 helper 建 doc + proposal，但把 partition_action 换成 MATCH
+    doc_id = await _make_doc(db_session, title="Match Test")
+    proposal_json = {
+        "article_title": "Match Test",
+        "article_summary": "summary",
+        "document_id": str(doc_id),
+        "tag_actions": [],
+        "topic_edges": [],
+        "partition_action": {
+            "action": "MATCH",
+            "target_partition_id": str(target_id),
+            "target_partition_name": "已存在分区",
+            "score": 0.9,
+            "reason": "",
+        },
+    }
+    # DraftGraph 仍要建（apply_proposal 会读它做 phase2 入库）
+    from datetime import datetime
+    dg = DraftGraph(
+        id=uuid4(),
+        document_id=doc_id,
+        graph_json={"summary": "s", "nodes": [], "edges": []},
+        status="draft",
+    )
+    db_session.add(dg)
+    prop = InsertionProposal(
+        id=uuid4(), document_id=doc_id,
+        proposal_json=proposal_json, status="pending",
+    )
+    db_session.add(prop)
+    await db_session.flush()
+    prop_id = prop.id
+
+    svc = ClusteringService(db_session)
+    # apply_proposal 可能因 embedding/llm 不可用而部分失败，但 partition 处理在前面
+    try:
+        await svc.apply_proposal(prop_id)
+    except Exception:
+        pass
+
+    # 验证 root 边存在
+    result = await db_session.execute(
+        select(Edge).where(
+            Edge.relation_type == "root",
+            Edge.target_node_id == target_id,
+        )
+    )
+    assert result.scalar_one_or_none() is not None, "MATCH partition_action 未建 root 边"
