@@ -37,10 +37,14 @@ export function computeRadialLayout(
   highlightedPartitionId?: string | null,
   searchQuery?: string,
 ): { nodes: RadialNode[]; edges: RadialEdge[] } {
-  // 1. 建立父子关系 map
+  // 1. 建立父子关系 map（仅保留 4 层层级边，忽略横向语义边与冗余 belongs_to）
+  // 层级关系：person --root--> partition, topic --part_of--> partition, article --tag--> topic
+  const HIERARCHICAL = new Set<GraphEdge['relationType']>(['root', 'part_of', 'tag']);
   const parentOf: Record<string, string> = {};
   edges.forEach(e => {
-    parentOf[e.source] = e.target;
+    if (HIERARCHICAL.has(e.relationType)) {
+      parentOf[e.source] = e.target;
+    }
   });
 
   // 2. 按 nodeType 分组
