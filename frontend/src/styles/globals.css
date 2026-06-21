@@ -103,6 +103,7 @@
   --node-person: #c98b6b;
   --node-organization: #6b8fa8;
   --node-paper: #5b9f8c;
+  --node-partition: #6366f1;
   --node-project: #b8893f;
   --node-framework: #a87bb0;
   --node-tool: #db7b6b;
@@ -162,6 +163,7 @@
   --node-person: #d89b7e;
   --node-organization: #82a3bc;
   --node-paper: #6fb3a0;
+  --node-partition: #818cf8;
   --node-project: #c99a52;
   --node-framework: #bc92c4;
   --node-tool: #e88e7e;
@@ -171,12 +173,12 @@
   --node-chunk: #b3a696;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
 html, body, #root { height: 100%; }
 
 body {
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;

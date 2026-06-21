@@ -22,11 +22,17 @@ import type { GraphNode, GraphEdge } from '../types/graph';
 // ── 节点渲染器 ──
 
 function PersonNode({ data }: NodeProps<Node<RadialNodeData>>) {
+  const color = nodeColorVar(data.nodeType);
   return (
     <div
       onClick={data.onSelect}
-      className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-full border-4 border-[#fbbf24] bg-[#fbbf24]/15 text-base font-bold text-[#fbbf24] shadow-lg"
-      style={{ opacity: data.dimmed ? 0.2 : 1 }}
+      className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-full border-4 text-base font-bold shadow-lg"
+      style={{
+        color,
+        borderColor: color,
+        backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+        opacity: data.dimmed ? 0.2 : 1,
+      }}
     >
       {data.label}
     </div>
