@@ -7,6 +7,7 @@ import { graphJsonToGraphData } from '../lib/graph-mappers';
 import { toErrorMessage } from '../lib/errors';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '../components/ui/sheet';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { EmptyState } from '../components/EmptyState';
@@ -27,6 +28,7 @@ export default function GlobalGraphPage() {
   const [articleGraph, setArticleGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,7 +66,17 @@ export default function GlobalGraphPage() {
 
   return (
     <div className="relative h-[calc(100vh-56px)] w-full">
-      {/* Top-right legend (no filter buttons, no search yet — Task 9 will add search) */}
+      {/* Top-left search */}
+      <div className="absolute left-3 top-3 z-10">
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索节点..."
+          className="max-w-xs bg-surface"
+        />
+      </div>
+
+      {/* Top-right legend */}
       <Card className="absolute right-3 top-3 z-10 gap-0 py-2 shadow-md">
         <CardContent className="flex items-center gap-3 px-3">
           {LEGEND.map(l => (
@@ -104,7 +116,11 @@ export default function GlobalGraphPage() {
       )}
 
       {!loading && !isEmpty && (
-        <RadialKnowledgeGraph graphData={graphData} onNodeClick={handleNodeClick} />
+        <RadialKnowledgeGraph
+          graphData={graphData}
+          onNodeClick={handleNodeClick}
+          searchQuery={searchQuery}
+        />
       )}
 
       {/* Article inspector */}

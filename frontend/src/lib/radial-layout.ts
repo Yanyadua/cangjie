@@ -35,6 +35,7 @@ export function computeRadialLayout(
   expandedTopicIds: Set<string>,
   onNodeClick?: (id: string) => void,
   highlightedPartitionId?: string | null,
+  searchQuery?: string,
 ): { nodes: RadialNode[]; edges: RadialEdge[] } {
   // 1. 建立父子关系 map
   const parentOf: Record<string, string> = {};
@@ -150,6 +151,11 @@ export function computeRadialLayout(
           dimmed = !belongs;
         }
       }
+
+      // 搜索匹配：未命中也淡化
+      const matchedSearch = !searchQuery ||
+        n.name.toLowerCase().includes(searchQuery.toLowerCase());
+      dimmed = dimmed || !matchedSearch;
 
       return {
         id: n.id,

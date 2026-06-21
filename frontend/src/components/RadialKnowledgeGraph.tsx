@@ -103,9 +103,10 @@ const nodeTypes = {
 export type RadialGraphProps = {
   graphData: { nodes: GraphNode[]; edges: GraphEdge[] };
   onNodeClick?: (nodeId: string) => void;
+  searchQuery?: string;
 };
 
-export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialGraphProps) {
+export default function RadialKnowledgeGraph({ graphData, onNodeClick, searchQuery = '' }: RadialGraphProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set());
@@ -118,8 +119,9 @@ export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialG
       expandedTopicIds,
       onNodeClick,
       highlightedPartitionId,
+      searchQuery,
     ),
-    [graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick, highlightedPartitionId],
+    [graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick, highlightedPartitionId, searchQuery],
   );
 
   useEffect(() => {
