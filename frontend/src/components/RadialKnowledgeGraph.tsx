@@ -22,9 +22,11 @@ import type { GraphNode, GraphEdge } from '../types/graph';
 // ── 节点渲染器 ──
 
 function PersonNode({ data }: NodeProps<Node<RadialNodeData>>) {
+  // Person 节点不挂 onClick：React Flow 的 canvas-level onNodeClick 已路由到
+  // handleNodeClickInternal 的 level===0 分支（重置视图）。inner onClick 在此是
+  // no-op，且会与 role="img" 产生语义冲突（img 不应可点击）。
   return (
     <div
-      onClick={data.onSelect}
       className="black-hole"
       style={{ opacity: data.dimmed ? 0.2 : 1 }}
       role="img"
