@@ -120,8 +120,20 @@ export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialG
     setEdges(laidOutEdges);
   }, [laidOutNodes, laidOutEdges, setNodes, setEdges]);
 
-  const handleNodeClick = useCallback(
+  const handleNodeClickInternal = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      const data = node.data as RadialNodeData;
+      // topic 点击 → 切换展开/收起（不冒泡到 onNodeClick）
+      if (data.level === 2) {
+        setExpandedTopicIds(prev => {
+          const next = new Set(prev);
+          if (next.has(node.id)) next.delete(node.id);
+          else next.add(node.id);
+          return next;
+        });
+        return;
+      }
+      // partition / person / article → delegate to parent
       onNodeClick?.(node.id);
     },
     [onNodeClick],
@@ -134,7 +146,7 @@ export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialG
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick}
+        onNodeClick={handleNodeClickInternal}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
