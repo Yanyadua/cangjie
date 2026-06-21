@@ -109,10 +109,17 @@ export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialG
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set());
+  const [highlightedPartitionId, setHighlightedPartitionId] = useState<string | null>(null);
 
   const { nodes: laidOutNodes, edges: laidOutEdges } = useMemo(
-    () => computeRadialLayout(graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick),
-    [graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick],
+    () => computeRadialLayout(
+      graphData.nodes,
+      graphData.edges,
+      expandedTopicIds,
+      onNodeClick,
+      highlightedPartitionId,
+    ),
+    [graphData.nodes, graphData.edges, expandedTopicIds, onNodeClick, highlightedPartitionId],
   );
 
   useEffect(() => {
@@ -123,8 +130,8 @@ export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialG
   const handleNodeClickInternal = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const data = node.data as RadialNodeData;
-      // topic 点击 → 切换展开/收起（不冒泡到 onNodeClick）
       if (data.level === 2) {
+        // topic → toggle expand
         setExpandedTopicIds(prev => {
           const next = new Set(prev);
           if (next.has(node.id)) next.delete(node.id);
@@ -133,7 +140,18 @@ export default function RadialKnowledgeGraph({ graphData, onNodeClick }: RadialG
         });
         return;
       }
-      // partition / person / article → delegate to parent
+      if (data.level === 1) {
+        // partition → toggle highlight
+        setHighlightedPartitionId(prev => prev === node.id ? null : node.id);
+        return;
+      }
+      if (data.level === 0) {
+        // person → reset
+        setHighlightedPartitionId(null);
+        setExpandedTopicIds(new Set());
+        return;
+      }
+      // article → delegate
       onNodeClick?.(node.id);
     },
     [onNodeClick],
