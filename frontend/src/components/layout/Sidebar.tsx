@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import {
-  PanelLeftClose, PanelLeftOpen, Upload, Clock, Network, Search, MessageSquare,
-} from 'lucide-react';
+import { Upload, Clock, Network, Search, MessageSquare, FlaskConical, Layers, GitMerge } from 'lucide-react';
 import { getDocuments } from '@/api/client';
 import type { DocumentResponse } from '@/types/graph';
 import { cn } from '@/lib/utils';
@@ -10,25 +8,27 @@ import { cn } from '@/lib/utils';
 const NAV = [
   { to: '/import', label: '导入', icon: Upload },
   { to: '/history', label: '历史', icon: Clock },
-  { to: '/graph', label: '全局图谱', icon: Network },
+  { to: '/graph', label: '我的图谱', icon: Network },
+  { to: '/partitions', label: '分区', icon: Layers },
+  { to: '/merge', label: '合并', icon: GitMerge },
   { to: '/search', label: '搜索', icon: Search },
   { to: '/ask', label: '问答', icon: MessageSquare },
+  { to: '/eval', label: '评估实验室', icon: FlaskConical },
 ];
 
 export function Sidebar({
-  collapsed, onToggleCollapsed, autoHide,
-}: { collapsed: boolean; onToggleCollapsed: (v: boolean) => void; autoHide: boolean }) {
+  collapsed, onToggleCollapsed,
+}: { collapsed: boolean; onToggleCollapsed: (v: boolean) => void }) {
   const [recent, setRecent] = useState<DocumentResponse[]>([]);
   useEffect(() => {
-    getDocuments(0, 8).then((d) => setRecent(d as DocumentResponse[])).catch(() => {});
+    getDocuments(0, 8).then((d) => setRecent((d as any)?.documents || [])).catch(() => {});
   }, []);
-  const collapsedNow = collapsed || autoHide;
 
   return (
     <aside
       className={cn(
-        'flex flex-col border-r border-border bg-surface transition-[width] duration-150',
-        collapsedNow ? 'w-14' : 'w-60',
+        'flex shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-surface transition-[width] duration-150',
+        collapsed ? 'w-14' : 'w-56',
       )}
     >
       <nav className="flex flex-col gap-1 p-2">
@@ -36,24 +36,25 @@ export function Sidebar({
           <NavLink
             key={to}
             to={to}
+            title={collapsed ? label : undefined}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium border-l-2 border-transparent',
-                collapsedNow && 'justify-center px-0',
+                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium',
+                collapsed && 'justify-center px-0',
                 isActive
-                  ? 'bg-accent-soft text-accent border-l-accent'
+                  ? 'bg-accent-soft text-accent'
                   : 'text-text-muted hover:bg-surface-2 hover:text-text',
               )
             }
           >
             <Icon className="h-[18px] w-[18px] shrink-0" />
-            {!collapsedNow && <span>{label}</span>}
+            {!collapsed && <span>{label}</span>}
           </NavLink>
         ))}
       </nav>
 
-      {!collapsedNow && (
-        <div className="mt-2 flex-1 overflow-y-auto px-3">
+      {!collapsed && (
+        <div className="mt-2 flex-1 overflow-y-auto px-2">
           <div className="px-2 pb-1 text-xs font-medium text-text-subtle">最近</div>
           {recent.map((d) => (
             <NavLink
@@ -67,14 +68,6 @@ export function Sidebar({
           ))}
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={() => onToggleCollapsed(!collapsed)}
-        className="m-2 inline-flex items-center justify-center rounded-md py-2 text-text-muted hover:bg-surface-2"
-      >
-        {collapsedNow ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
-      </button>
     </aside>
   );
 }

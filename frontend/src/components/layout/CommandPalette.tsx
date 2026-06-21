@@ -38,7 +38,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const pages: Item[] = [
     { id: 'p-import', label: '导入新文章', run: () => { navigate('/import'); close(); } },
-    { id: 'p-graph', label: '打开全局图谱', run: () => { navigate('/graph'); close(); } },
+    { id: 'p-graph', label: '打开我的图谱', run: () => { navigate('/graph'); close(); } },
     { id: 'p-search', label: '搜索知识库', run: () => { navigate('/search'); close(); } },
     { id: 'p-ask', label: '向知识库提问', run: () => { navigate('/ask'); close(); } },
     { id: 'p-history', label: '查看历史', run: () => { navigate('/history'); close(); } },
