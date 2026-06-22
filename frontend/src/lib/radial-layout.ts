@@ -181,13 +181,19 @@ export function computeRadialLayout(
   const visibleNodeIds = new Set(radialNodes.map(n => n.id));
   const radialEdges: RadialEdge[] = edges
     .filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target))
-    .map(e => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      type: 'default',
-      style: { stroke: 'var(--text-subtle)', strokeWidth: 1 },
-    }));
+    .map(e => {
+      // root 边（person ↔ partition）用金色粗线，呼应黑洞吸积盘
+      const isRoot = e.relationType === 'root';
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        type: 'default',
+        style: isRoot
+          ? { stroke: 'rgba(251, 191, 36, 0.6)', strokeWidth: 2 }
+          : { stroke: 'var(--border-strong)', strokeWidth: 1.5 },
+      };
+    });
 
   return { nodes: radialNodes, edges: radialEdges };
 }
