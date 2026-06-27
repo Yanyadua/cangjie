@@ -32,6 +32,8 @@ function PersonNode({ data }: NodeProps<Node<RadialNodeData>>) {
       role="img"
       aria-label="我 — 知识图谱中心"
     >
+      {/* source handle 必须存在，否则 root 边 (person → partition) 找不到锚点无法渲染 */}
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
       <div className="black-hole__halo" />
       <div className="black-hole__disk" />
       <div className="black-hole__horizon" />
