@@ -111,6 +111,19 @@
   --node-technology: #3fa38b;
   --node-question: #c4863b;
   --node-chunk: #9b8b7a;
+
+  /* ── Cosmic UI tokens (M1, see docs/plans/2026-06-27-cosmic-ui-design.md §2.1) ── */
+  --space-deep:    #050208;
+  --space-mid:     #0d0617;
+  --nebula-purple: #4c1d95;
+  --nebula-amber:  #f59e0b;
+  --star-white:    #fef3c7;
+  --star-blue:     #93c5fd;
+  --star-red:      #fca5a5;
+  /* accretion disk temperature ramp (shader LUT) */
+  --disk-inner:    #fef3c7;   /* white-hot */
+  --disk-mid:      #f59e0b;   /* amber */
+  --disk-outer:    #7c2d12;   /* dark red */
 }
 
 .dark {

@@ -1,10 +1,12 @@
 // frontend/src/pages/CosmosPage.tsx
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RadialKnowledgeGraph from '../components/RadialKnowledgeGraph';
+import { CosmosCanvas } from '../components/cosmos';
 import GraphEditor from '../components/GraphEditor';
 import { getGlobalGraph, getArticleSubgraph } from '../api/client';
 import { graphJsonToGraphData } from '../lib/graph-mappers';
+import { graphDataToCosmosScene } from '../lib/cosmos-mappers';
 import { toErrorMessage } from '../lib/errors';
 import { getGpuTier } from '../lib/gpu-tier';
 import { useIsCoarsePointer, useIsNarrowViewport } from '../hooks/use-media-query';
@@ -17,7 +19,11 @@ import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import type { GraphNode, GraphEdge } from '../types/graph';
 
-const LEGEND = [
+const LEGEND_3D = [
+  { label: '黑洞（我）', color: 'var(--nebula-amber)' },
+  { label: '星系（分区）', color: 'var(--node-partition)' },
+];
+const LEGEND_2D = [
   { label: '我', color: 'var(--node-person)' },
   { label: '分区', color: 'var(--node-partition)' },
   { label: '主题', color: 'var(--node-topic)' },
@@ -36,8 +42,14 @@ export default function CosmosPage() {
   const isCoarse = useIsCoarsePointer();
   const isNarrow = useIsNarrowViewport();
   const tier = getGpuTier();
-  // M0: always render RadialKnowledgeGraph.
-  // M1+ will enable r3f when tier <= 3 && !isCoarse && !isNarrow.
+  const isEmpty = !loading && graphData.nodes.length === 0;
+  // M1 gate: 3D only on WebGL2 tiers (1-3), desktop pointer, wide viewport, with data.
+  const use3D = tier.tier <= 3 && !isCoarse && !isNarrow && !loading && !isEmpty && !error;
+  const legend = use3D ? LEGEND_3D : LEGEND_2D;
+  const cosmosScene = useMemo(
+    () => graphDataToCosmosScene(graphData.nodes, graphData.edges),
+    [graphData.nodes, graphData.edges],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,32 +83,33 @@ export default function CosmosPage() {
     if (!open) setSelectedArticle(null);
   };
 
-  const isEmpty = !loading && graphData.nodes.length === 0;
-
   return (
     <div className="relative h-[calc(100vh-56px)] w-full">
-      {/* Dev-mode tier indicator (top-center pill). Removed in M1 when 3D ships. */}
+      {/* Dev-mode tier indicator (top-center pill). */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
         <div className="rounded-full bg-surface/80 px-3 py-1 text-[10px] text-text-muted backdrop-blur">
-          宇宙化 UI · M0 基建 · Tier {tier.tier}（{tier.reason}）· 下一站：M1 黑洞
+          宇宙化 UI · M1 3D · Tier {tier.tier}（{tier.reason}）
+          {use3D ? ' · 3D 模式' : ' · 降级模式'}
           {(isCoarse || isNarrow) && ' · 移动端'}
         </div>
       </div>
 
-      {/* Top-left search */}
-      <div className="absolute left-3 top-3 z-10">
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="搜索节点..."
-          className="max-w-xs bg-surface"
-        />
-      </div>
+      {/* Top-left search (hidden in 3D mode — 3D search is its own milestone) */}
+      {!use3D && (
+        <div className="absolute left-3 top-3 z-10">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索节点..."
+            className="max-w-xs bg-surface"
+          />
+        </div>
+      )}
 
       {/* Top-right legend */}
       <Card className="absolute right-3 top-3 z-10 gap-0 py-2 shadow-md">
         <CardContent className="flex items-center gap-3 px-3">
-          {LEGEND.map(l => (
+          {legend.map(l => (
             <div key={l.label} className="flex items-center gap-1">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ background: l.color }} />
               <span className="text-xs text-text-muted">{l.label}</span>
@@ -132,14 +145,23 @@ export default function CosmosPage() {
         </div>
       )}
 
-      {!loading && !isEmpty && (
-        <div className="cosmos-canvas h-full w-full">
-          <RadialKnowledgeGraph
-            graphData={graphData}
-            onNodeClick={handleNodeClick}
-            searchQuery={searchQuery}
-          />
-        </div>
+      {!loading && !isEmpty && !error && (
+        use3D ? (
+          <div className="cosmos-canvas h-full w-full">
+            <CosmosCanvas
+              scene={cosmosScene}
+              onGalaxyClick={(id) => navigate('/galaxy/' + id)}
+            />
+          </div>
+        ) : (
+          <div className="cosmos-canvas h-full w-full">
+            <RadialKnowledgeGraph
+              graphData={graphData}
+              onNodeClick={handleNodeClick}
+              searchQuery={searchQuery}
+            />
+          </div>
+        )
       )}
 
       {/* Article inspector */}
