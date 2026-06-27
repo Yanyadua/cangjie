@@ -44,7 +44,39 @@ const FRAG = /* glsl */ `
       return;
     }
 
-    // Outside the disk for now — fully transparent (let starfield show)
+    // Accretion disk — between DISK_INNER_R and DISK_OUTER_R
+    if (r >= DISK_INNER_R && r <= DISK_OUTER_R) {
+      // Normalized disk radial position [0,1] inner→outer
+      float t = (r - DISK_INNER_R) / (DISK_OUTER_R - DISK_INNER_R);
+
+      // Keplerian rotation: angular speed inversely proportional to sqrt(r).
+      // Inner (~r=0.35): ~4s/turn. Outer (~r=1.0): ~30s/turn.
+      float angSpeed = 1.5 / sqrt(r);
+      float angle = atan(p.y, p.x);
+      float rotated = angle + uTime * angSpeed;
+
+      // Procedural disk texture: spiral streaks
+      float streak = 0.5 + 0.5 * sin(rotated * 8.0 + t * 20.0);
+      streak = mix(0.7, 1.0, streak);
+
+      // Temperature gradient LUT (design §2.6)
+      vec3 inner = vec3(1.0, 0.953, 0.780);   // #fef3c7 white-hot
+      vec3 mid   = vec3(0.961, 0.620, 0.043); // #f59e0b amber
+      vec3 outer = vec3(0.486, 0.176, 0.071); // #7c2d12 dark red
+      vec3 temp;
+      if (t < 0.5) temp = mix(inner, mid, t * 2.0);
+      else         temp = mix(mid, outer, (t - 0.5) * 2.0);
+
+      // Falloff at the outer edge so the disk dissolves into space
+      float edgeFade = 1.0 - smoothstep(0.85, 1.0, t);
+
+      vec3 col = temp * streak * edgeFade;
+      // Brightness pumped up — will read as glow even without Bloom (M4)
+      gl_FragColor = vec4(col * 1.6, 1.0);
+      return;
+    }
+
+    // Beyond the disk — transparent
     gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
   }
 `;
