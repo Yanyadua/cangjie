@@ -46,12 +46,20 @@ function PartitionNode({ data, selected }: NodeProps<Node<RadialNodeData>>) {
   return (
     <div
       onClick={data.onSelect}
-      className="flex min-w-[120px] cursor-pointer flex-col items-center rounded-xl border-2 bg-surface p-2 shadow-md"
+      className="relative flex min-w-[120px] cursor-pointer flex-col items-center rounded-xl border-2 bg-surface p-2 shadow-md"
       style={{ borderColor: selected ? color : 'var(--border)', opacity: data.dimmed ? 0.2 : 1 }}
     >
       <Handle type="target" position={Position.Top} style={{ background: color, opacity: 0 }} />
       <span className="text-[10px] uppercase tracking-wide text-text-muted">分区</span>
       <span className="text-sm font-semibold text-text">{data.label}</span>
+      {data.childCount !== undefined && data.childCount > 0 && (
+        <span
+          className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+          style={{ background: color }}
+        >
+          {data.childCount}
+        </span>
+      )}
       <Handle type="source" position={Position.Bottom} style={{ background: color, opacity: 0 }} />
     </div>
   );

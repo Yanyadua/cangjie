@@ -125,6 +125,13 @@ export function computeRadialLayout(
     if (tid) articleCountByTopic[tid] = (articleCountByTopic[tid] || 0) + 1;
   });
 
+  // 7b. 统计每个 partition 的 article 数（= 该分区下所有 topic 的 article 数总和）
+  const articleCountByPartition: Record<string, number> = {};
+  Object.entries(topicsByPartition).forEach(([pid, topics]) => {
+    const total = topics.reduce((sum, t) => sum + (articleCountByTopic[t.id] || 0), 0);
+    if (total > 0) articleCountByPartition[pid] = total;
+  });
+
   // 8. 构建 React Flow 节点
   const radialNodes: RadialNode[] = nodes
     .filter(n => {
@@ -170,7 +177,11 @@ export function computeRadialLayout(
           nodeType: n.nodeType,
           level,
           parentId: parentOf[n.id],
-          childCount: level === 2 ? (articleCountByTopic[n.id] || 0) : undefined,
+          childCount: level === 2
+            ? (articleCountByTopic[n.id] || 0)
+            : level === 1
+              ? (articleCountByPartition[n.id] || 0)
+              : undefined,
           expanded: level === 2 ? expandedTopicIds.has(n.id) : undefined,
           dimmed,
           onSelect: onNodeClick ? () => onNodeClick(n.id) : undefined,
