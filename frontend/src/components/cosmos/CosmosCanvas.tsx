@@ -1,7 +1,8 @@
 // frontend/src/components/cosmos/CosmosCanvas.tsx
-import { useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { useEffect, useState } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { Line, Html } from '@react-three/drei';
+import * as THREE from 'three';
 import type { CosmosScene } from '../../lib/cosmos-mappers';
 import { getGpuTier } from '../../lib/gpu-tier';
 import BlackHole from './BlackHole';
@@ -26,6 +27,26 @@ export interface CosmosCanvasProps {
   onGalaxyClick?: (galaxyId: string) => void;
 }
 
+/** Disposes geometries/materials/GL on Canvas unmount. Must live inside <Canvas>. */
+function Cleanup() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    return () => {
+      scene.traverse((obj) => {
+        const m = obj as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+        if (m.material) {
+          if (Array.isArray(m.material)) m.material.forEach((x) => x.dispose());
+          else (m.material as THREE.Material).dispose();
+        }
+      });
+      gl.dispose();
+    };
+  }, [gl, scene]);
+  return null;
+}
+
 export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps) {
   const tier = getGpuTier();
   const positions = layoutGalaxies(scene.galaxies.length);
@@ -36,6 +57,7 @@ export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps
       gl={{ alpha: true, antialias: true }}
       style={{ position: 'absolute', inset: 0, background: 'transparent' }}
     >
+      <Cleanup />
       <ambientLight intensity={0.4} />
       <pointLight position={[0, 0, 0]} intensity={2} distance={20} color="#f59e0b" />
       <BlackHole position={[0, 0, 0]} simple={tier.tier === 3} />

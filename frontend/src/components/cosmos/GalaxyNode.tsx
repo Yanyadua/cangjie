@@ -40,9 +40,14 @@ export default function GalaxyNode({
   const groupRef = useRef<THREE.Group>(null);
   const puffPositions = usePuff(60, 0.45);
 
+  const reducedMotion = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
   // Slow idle rotation of the particle puff
   useFrame((_, delta) => {
-    if (groupRef.current) groupRef.current.rotation.z += delta * 0.05;
+    if (groupRef.current && !reducedMotion) groupRef.current.rotation.z += delta * 0.05;
   });
 
   return (

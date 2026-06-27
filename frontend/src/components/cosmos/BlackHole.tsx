@@ -126,8 +126,13 @@ export default function BlackHole({ position = [0, 0, 0], size = 1.2, simple = f
 
   const fragmentShader = simple ? FRAG_SIMPLE : FRAG;
 
+  const reducedMotion = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
   useFrame((_, delta) => {
-    if (matRef.current && !simple) {
+    if (matRef.current && !simple && !reducedMotion) {
       (matRef.current.uniforms.uTime.value as number) += delta;
     }
   });
