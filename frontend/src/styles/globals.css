@@ -189,6 +189,18 @@ input, textarea, select, button { font-family: inherit; }
 /* React Flow: theme-aware via CSS vars (see Task 3.8) */
 .react-flow { background: var(--bg); }
 
+/* Cosmic UI: let starfield show through on /cosmos route.
+   Other React Flow pages (DraftGraph, GraphEditor) keep opaque bg. */
+.cosmos-canvas .react-flow,
+.cosmos-canvas .react-flow__pane,
+.cosmos-canvas .react-flow__viewport {
+  background: transparent !important;
+}
+.cosmos-canvas .react-flow__attribution { display: none; }
+
+/* Starfield twinkle — disabled while isolating white-screen regression.
+   Will re-enable via CSS opacity animation once canvas is stable. */
+
 /* page transition (see Task 4.1) */
 @keyframes page-in {
   from { opacity: 0; transform: translateY(4px); }

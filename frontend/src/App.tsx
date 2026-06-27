@@ -18,7 +18,8 @@ import EvaluationLabPage from './pages/EvaluationLabPage';
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Persistent cosmic background — survives route changes */}
+      {/* Persistent cosmic background — survives route changes.
+          Static canvas + CSS breathe animation (no RAF loop). */}
       <StarfieldBg density="medium" />
       <AppShell>
         <Routes>

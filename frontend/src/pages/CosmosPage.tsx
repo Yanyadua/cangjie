@@ -36,9 +36,8 @@ export default function CosmosPage() {
   const isCoarse = useIsCoarsePointer();
   const isNarrow = useIsNarrowViewport();
   const tier = getGpuTier();
-  // M0: always degrade to RadialKnowledgeGraph.
-  // M1+ will enable r3f rendering when tier <= 3 && !isCoarse && !isNarrow.
-  const use3D = false;
+  // M0: always render RadialKnowledgeGraph.
+  // M1+ will enable r3f when tier <= 3 && !isCoarse && !isNarrow.
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,8 +78,7 @@ export default function CosmosPage() {
       {/* Dev-mode tier indicator (top-center pill). Removed in M1 when 3D ships. */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
         <div className="rounded-full bg-surface/80 px-3 py-1 text-[10px] text-text-muted backdrop-blur">
-          宇宙化 UI · M0 基建 · 当前 Tier {tier.tier}（{tier.reason}）
-          {use3D ? ' · 3D 模式' : ' · 降级模式（待 M1 启用 3D）'}
+          宇宙化 UI · M0 基建 · Tier {tier.tier}（{tier.reason}）· 下一站：M1 黑洞
           {(isCoarse || isNarrow) && ' · 移动端'}
         </div>
       </div>
@@ -135,11 +133,13 @@ export default function CosmosPage() {
       )}
 
       {!loading && !isEmpty && (
-        <RadialKnowledgeGraph
-          graphData={graphData}
-          onNodeClick={handleNodeClick}
-          searchQuery={searchQuery}
-        />
+        <div className="cosmos-canvas h-full w-full">
+          <RadialKnowledgeGraph
+            graphData={graphData}
+            onNodeClick={handleNodeClick}
+            searchQuery={searchQuery}
+          />
+        </div>
       )}
 
       {/* Article inspector */}
