@@ -22,6 +22,7 @@ const FRAG = /* glsl */ `
   #define PHOTON_SPHERE_R 0.33
   #define DISK_INNER_R    0.35
   #define DISK_OUTER_R    1.00
+  #define DOPPLER_STRENGTH 0.6
 
   void main() {
     // vUv is [0,1]; remap to [-1,1] centered on hole
@@ -71,6 +72,15 @@ const FRAG = /* glsl */ `
       float edgeFade = 1.0 - smoothstep(0.85, 1.0, t);
 
       vec3 col = temp * streak * edgeFade;
+      // Doppler beaming — +x approaching (brighter/bluer), -x receding (dimmer/redder)
+      float doppler = DOPPLER_STRENGTH * (p.x / r); // [-strength, +strength]
+      float beamFactor = 1.0 + doppler;              // brightness modulation
+      // Color shift: approach → star-blue, recede → star-red
+      vec3 blueShift = vec3(0.576, 0.773, 0.992);    // #93c5fd
+      vec3 redShift  = vec3(0.988, 0.647, 0.647);    // #fca5a5
+      vec3 shift = mix(redShift, blueShift, doppler * 1.67 + 0.5); // map [-0.6,0.6]→[0,1]
+      col = mix(col, col * shift, abs(doppler) * 0.8);
+      col *= beamFactor;
       // Brightness pumped up — will read as glow even without Bloom (M4)
       gl_FragColor = vec4(col * 1.6, 1.0);
       return;
