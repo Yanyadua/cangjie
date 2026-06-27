@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
+import { StarfieldBg } from './components/cosmos';
 import ImportPage from './pages/ImportPage';
 import ExtractionWizardPage from './pages/ExtractionWizardPage';
 import HistoryPage from './pages/HistoryPage';
@@ -16,6 +17,8 @@ import EvaluationLabPage from './pages/EvaluationLabPage';
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Persistent cosmic background — survives route changes */}
+      <StarfieldBg density="medium" />
       <AppShell>
         <Routes>
           <Route path="/" element={<ImportPage />} />
