@@ -1,6 +1,7 @@
 // frontend/src/components/cosmos/CosmosCanvas.tsx
+import { useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Line } from '@react-three/drei';
+import { Line, Html } from '@react-three/drei';
 import type { CosmosScene } from '../../lib/cosmos-mappers';
 import { getGpuTier } from '../../lib/gpu-tier';
 import BlackHole from './BlackHole';
@@ -28,6 +29,7 @@ export interface CosmosCanvasProps {
 export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps) {
   const tier = getGpuTier();
   const positions = layoutGalaxies(scene.galaxies.length);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   return (
     <Canvas
       camera={{ position: [0, 0, 14], fov: 50 }}
@@ -61,7 +63,16 @@ export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps
           color="#6366f1"
           childCount={g.childCount}
           onClick={() => onGalaxyClick?.(g.id)}
+          onHover={(h) => setHoveredId(h ? g.id : null)}
         />
+      ))}
+      {scene.galaxies.map((g, i) => hoveredId === g.id && (
+        <Html key={`tip-${g.id}`} position={positions[i]} center distanceFactor={10}>
+          <div className="pointer-events-none rounded-md bg-surface/95 px-2 py-1 text-xs text-text shadow-md">
+            <div className="font-semibold">{g.name}</div>
+            <div className="text-[10px] text-text-muted">{g.childCount} 个连接</div>
+          </div>
+        </Html>
       ))}
     </Canvas>
   );
