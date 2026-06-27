@@ -1,6 +1,7 @@
 // frontend/src/components/cosmos/CosmosCanvas.tsx
 import { Canvas } from '@react-three/fiber';
 import type { CosmosScene } from '../../lib/cosmos-mappers';
+import { getGpuTier } from '../../lib/gpu-tier';
 import BlackHole from './BlackHole';
 import GalaxyNode from './GalaxyNode';
 
@@ -22,6 +23,7 @@ export interface CosmosCanvasProps {
 }
 
 export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps) {
+  const tier = getGpuTier();
   const positions = layoutGalaxies(scene.galaxies.length);
   return (
     <Canvas
@@ -31,7 +33,7 @@ export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps
     >
       <ambientLight intensity={0.4} />
       <pointLight position={[0, 0, 0]} intensity={2} distance={20} color="#f59e0b" />
-      <BlackHole position={[0, 0, 0]} />
+      <BlackHole position={[0, 0, 0]} simple={tier.tier === 3} />
       {scene.galaxies.map((g, i) => (
         <GalaxyNode
           key={g.id}

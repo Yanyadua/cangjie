@@ -12,6 +12,23 @@ const VERT = /* glsl */ `
   }
 `;
 
+const FRAG_SIMPLE = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  #define EVENT_HORIZON_R 0.30
+  #define DISK_OUTER_R    1.00
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    if (r < EVENT_HORIZON_R) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
+    if (r > DISK_OUTER_R)    { gl_FragColor = vec4(0.0,0.0,0.0,0.0); return; }
+    // flat amber disk, slight radial falloff
+    vec3 amber = vec3(0.961, 0.620, 0.043);
+    float fade = 1.0 - smoothstep(0.6, 1.0, r);
+    gl_FragColor = vec4(amber * fade * 1.4, 1.0);
+  }
+`;
+
 const FRAG = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
@@ -95,9 +112,11 @@ export interface BlackHoleProps {
   position?: [number, number, number];
   /** quad visual radius in world units; ~1.2 maps to the design's 120px feel at z=14 */
   size?: number;
+  /** When true, use simplified FRAG_SIMPLE (Tier 3 fallback). */
+  simple?: boolean;
 }
 
-export default function BlackHole({ position = [0, 0, 0], size = 1.2 }: BlackHoleProps) {
+export default function BlackHole({ position = [0, 0, 0], size = 1.2, simple = false }: BlackHoleProps) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
 
   const uniforms = useMemo(
@@ -105,8 +124,10 @@ export default function BlackHole({ position = [0, 0, 0], size = 1.2 }: BlackHol
     [],
   );
 
+  const fragmentShader = simple ? FRAG_SIMPLE : FRAG;
+
   useFrame((_, delta) => {
-    if (matRef.current) {
+    if (matRef.current && !simple) {
       (matRef.current.uniforms.uTime.value as number) += delta;
     }
   });
@@ -118,7 +139,7 @@ export default function BlackHole({ position = [0, 0, 0], size = 1.2 }: BlackHol
         <shaderMaterial
           ref={matRef}
           vertexShader={VERT}
-          fragmentShader={FRAG}
+          fragmentShader={fragmentShader}
           uniforms={uniforms}
           transparent
           depthWrite={false}
