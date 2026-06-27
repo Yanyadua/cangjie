@@ -1,10 +1,12 @@
 // frontend/src/pages/CosmosPage.tsx
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RadialKnowledgeGraph from '../components/RadialKnowledgeGraph';
+import { CosmosCanvas } from '../components/cosmos';
 import GraphEditor from '../components/GraphEditor';
 import { getGlobalGraph, getArticleSubgraph } from '../api/client';
 import { graphJsonToGraphData } from '../lib/graph-mappers';
+import { graphDataToCosmosScene } from '../lib/cosmos-mappers';
 import { toErrorMessage } from '../lib/errors';
 import { getGpuTier } from '../lib/gpu-tier';
 import { useIsCoarsePointer, useIsNarrowViewport } from '../hooks/use-media-query';
@@ -36,9 +38,13 @@ export default function CosmosPage() {
   const isCoarse = useIsCoarsePointer();
   const isNarrow = useIsNarrowViewport();
   const tier = getGpuTier();
-  // M0: always degrade to RadialKnowledgeGraph.
-  // M1+ will enable r3f rendering when tier <= 3 && !isCoarse && !isNarrow.
-  const use3D = false;
+  const isEmpty = !loading && graphData.nodes.length === 0;
+  // M1 gate: 3D only on WebGL2 tiers (1-3), desktop pointer, wide viewport, with data.
+  const use3D = tier.tier <= 3 && !isCoarse && !isNarrow && !loading && !isEmpty && !error;
+  const cosmosScene = useMemo(
+    () => graphDataToCosmosScene(graphData.nodes, graphData.edges),
+    [graphData.nodes, graphData.edges],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,15 +78,13 @@ export default function CosmosPage() {
     if (!open) setSelectedArticle(null);
   };
 
-  const isEmpty = !loading && graphData.nodes.length === 0;
-
   return (
     <div className="relative h-[calc(100vh-56px)] w-full">
-      {/* Dev-mode tier indicator (top-center pill). Removed in M1 when 3D ships. */}
+      {/* Dev-mode tier indicator (top-center pill). */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
         <div className="rounded-full bg-surface/80 px-3 py-1 text-[10px] text-text-muted backdrop-blur">
-          宇宙化 UI · M0 基建 · 当前 Tier {tier.tier}（{tier.reason}）
-          {use3D ? ' · 3D 模式' : ' · 降级模式（待 M1 启用 3D）'}
+          宇宙化 UI · M1 3D · Tier {tier.tier}（{tier.reason}）
+          {use3D ? ' · 3D 模式' : ' · 降级模式'}
           {(isCoarse || isNarrow) && ' · 移动端'}
         </div>
       </div>
@@ -134,12 +138,23 @@ export default function CosmosPage() {
         </div>
       )}
 
-      {!loading && !isEmpty && (
-        <RadialKnowledgeGraph
-          graphData={graphData}
-          onNodeClick={handleNodeClick}
-          searchQuery={searchQuery}
-        />
+      {!loading && !isEmpty && !error && (
+        use3D ? (
+          <div className="cosmos-canvas h-full w-full">
+            <CosmosCanvas
+              scene={cosmosScene}
+              onGalaxyClick={(id) => navigate('/galaxy/' + id)}
+            />
+          </div>
+        ) : (
+          <div className="cosmos-canvas h-full w-full">
+            <RadialKnowledgeGraph
+              graphData={graphData}
+              onNodeClick={handleNodeClick}
+              searchQuery={searchQuery}
+            />
+          </div>
+        )
       )}
 
       {/* Article inspector */}
