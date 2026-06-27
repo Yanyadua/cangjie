@@ -1,5 +1,6 @@
 // frontend/src/components/cosmos/StarfieldBg.tsx
 import { useEffect, useRef } from 'react';
+import { useMediaQuery } from '../../hooks/use-media-query';
 
 interface Star {
   x: number;
@@ -28,12 +29,14 @@ const DENSITY_COUNT: Record<NonNullable<StarfieldBgProps['density']>, number> = 
  *
  * Implementation notes:
  * - Canvas 2D (no WebGL dependency — works on every tier)
- * - DPR-aware (uses devicePixelRatio for crisp rendering)
- * - `prefers-reduced-motion` stops twinkle
+ * - DPR-aware (re-read on resize to handle display changes)
+ * - `prefers-reduced-motion` live-tracked via useMediaQuery
  * - ResizeObserver for responsive resize
+ * - Per-frame work minimized: layout cached, no allocations in render loop
  */
 export default function StarfieldBg({ density = 'medium', className }: StarfieldBgProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,12 +45,11 @@ export default function StarfieldBg({ density = 'medium', className }: Starfield
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
     let stars: Star[] = [];
     let rafId = 0;
     let resizeObserver: ResizeObserver | null = null;
+    let cachedWidth = 0;
+    let cachedHeight = 0;
 
     const generateStars = (width: number, height: number) => {
       const count = Math.floor(
@@ -64,7 +66,10 @@ export default function StarfieldBg({ density = 'medium', className }: Starfield
     };
 
     const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const rect = canvas.getBoundingClientRect();
+      cachedWidth = rect.width;
+      cachedHeight = rect.height;
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -72,10 +77,9 @@ export default function StarfieldBg({ density = 'medium', className }: Starfield
     };
 
     const render = (time: number) => {
-      const rect = canvas.getBoundingClientRect();
-      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.clearRect(0, 0, cachedWidth, cachedHeight);
       ctx.fillStyle = '#050208';
-      ctx.fillRect(0, 0, rect.width, rect.height);
+      ctx.fillRect(0, 0, cachedWidth, cachedHeight);
 
       const t = time * 0.001;
       for (const star of stars) {
@@ -87,26 +91,25 @@ export default function StarfieldBg({ density = 'medium', className }: Starfield
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fill();
       }
-      rafId = requestAnimationFrame(render);
+
+      // Reduced-motion: render once, do not reschedule.
+      if (!reducedMotion) {
+        rafId = requestAnimationFrame(render);
+      }
     };
 
     resize();
     resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
 
-    if (!reducedMotion) {
-      rafId = requestAnimationFrame(render);
-    } else {
-      // Render one frame, no loop
-      render(0);
-      cancelAnimationFrame(rafId);
-    }
+    // Kick off — for reduced-motion, this single rAF draws one frame and stops.
+    rafId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(rafId);
       resizeObserver?.disconnect();
     };
-  }, [density]);
+  }, [density, reducedMotion]);
 
   return (
     <canvas
@@ -115,12 +118,10 @@ export default function StarfieldBg({ density = 'medium', className }: Starfield
       style={{
         position: 'fixed',
         inset: 0,
-        width: '100vw',
-        height: '100vh',
         pointerEvents: 'none',
         zIndex: 0,
       }}
-      aria-hidden
+      aria-hidden="true"
     />
   );
 }
