@@ -43,7 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         sidebarCollapsed={effectiveCollapsed}
         onToggleSidebar={handleToggleSidebar}
       />
-      <div className={`flex min-h-0 flex-1 ${isCosmic ? '' : 'gap-4 px-4'}`}>
+      <div className="flex min-h-0 flex-1">
         {!isCosmic && (
           <Sidebar collapsed={effectiveCollapsed} onToggleCollapsed={(v) => { setManualOverride(true); setCollapsed(v); }} />
         )}
