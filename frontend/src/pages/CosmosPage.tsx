@@ -19,7 +19,11 @@ import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import type { GraphNode, GraphEdge } from '../types/graph';
 
-const LEGEND = [
+const LEGEND_3D = [
+  { label: '黑洞（我）', color: 'var(--nebula-amber)' },
+  { label: '星系（分区）', color: 'var(--node-partition)' },
+];
+const LEGEND_2D = [
   { label: '我', color: 'var(--node-person)' },
   { label: '分区', color: 'var(--node-partition)' },
   { label: '主题', color: 'var(--node-topic)' },
@@ -41,6 +45,7 @@ export default function CosmosPage() {
   const isEmpty = !loading && graphData.nodes.length === 0;
   // M1 gate: 3D only on WebGL2 tiers (1-3), desktop pointer, wide viewport, with data.
   const use3D = tier.tier <= 3 && !isCoarse && !isNarrow && !loading && !isEmpty && !error;
+  const legend = use3D ? LEGEND_3D : LEGEND_2D;
   const cosmosScene = useMemo(
     () => graphDataToCosmosScene(graphData.nodes, graphData.edges),
     [graphData.nodes, graphData.edges],
@@ -89,20 +94,22 @@ export default function CosmosPage() {
         </div>
       </div>
 
-      {/* Top-left search */}
-      <div className="absolute left-3 top-3 z-10">
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="搜索节点..."
-          className="max-w-xs bg-surface"
-        />
-      </div>
+      {/* Top-left search (hidden in 3D mode — 3D search is its own milestone) */}
+      {!use3D && (
+        <div className="absolute left-3 top-3 z-10">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索节点..."
+            className="max-w-xs bg-surface"
+          />
+        </div>
+      )}
 
       {/* Top-right legend */}
       <Card className="absolute right-3 top-3 z-10 gap-0 py-2 shadow-md">
         <CardContent className="flex items-center gap-3 px-3">
-          {LEGEND.map(l => (
+          {legend.map(l => (
             <div key={l.label} className="flex items-center gap-1">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ background: l.color }} />
               <span className="text-xs text-text-muted">{l.label}</span>
