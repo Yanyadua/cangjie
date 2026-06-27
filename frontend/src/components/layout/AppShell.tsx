@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="flex h-screen flex-col bg-bg text-text">
+    <div className="flex h-screen flex-col bg-transparent text-text">
       <TopBar
         onOpenCommand={() => setCmdOpen(true)}
         sidebarCollapsed={effectiveCollapsed}
