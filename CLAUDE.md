@@ -107,7 +107,11 @@ Step2 展开支持流式传输，全链路：
 ## 用户偏好
 
 - **所有方案文档用中文**：设计文档、方案描述、注释说明等一律使用中文
-- **MCP 工具全部使用 z.ai 的**：web_search / webReader / understand_image / analyze_image 等，优先调用 `mcp__MiniMax__*`、`mcp__web_reader__*`、`mcp__4_5v_mcp__*`，不要用其他来源的同类型工具
+- **MCP 工具优先使用（能用就用）**：z.ai 系列 MCP，遇到匹配场景**主动调用**，不要降级到纯文本回答或自己手写实现。当前实测可用路由（2026-06-27）：
+  - **看图/截图分析** → `mcp__4_5v_mcp__analyze_image`（远程 URL，PNG/JPG/JPEG，主力）；`mcp__MiniMax__understand_image` 已配额耗尽不可用
+  - **抓取/读网页** → `mcp__web_reader__webReader`（URL → markdown，可保留图片/链接摘要）
+  - **联网检索** → `mcp__web-search-prime__webSearchPrime`（智谱官方搜索 MCP，主力，2026-06-27 装入，复用 `ANTHROPIC_AUTH_TOKEN` 鉴权）；`mcp__MiniMax__web_search` 已配额耗尽不可用；内置 `WebSearch` 作备份
+  - 典型场景：UI 走查看截图、读官方文档、复刻前端页面
 
 ## 关键设计决策
 
