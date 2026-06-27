@@ -28,7 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const handleToggleSidebar = () => {
     setManualOverride(true);
-    setCollapsed((v) => !v);
+    setCollapsed(!effectiveCollapsed);
   };
 
   useAppKeyboard({
@@ -44,9 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         onToggleSidebar={handleToggleSidebar}
       />
       <div className="flex min-h-0 flex-1">
-        {!isCosmic && (
-          <Sidebar collapsed={effectiveCollapsed} onToggleCollapsed={(v) => { setManualOverride(true); setCollapsed(v); }} />
-        )}
+        <Sidebar collapsed={effectiveCollapsed} onToggleCollapsed={(v) => { setManualOverride(true); setCollapsed(v); }} />
         <main className="min-w-0 flex-1 overflow-hidden">
           <div key={pathname} className="page-enter h-full">
             {children}
