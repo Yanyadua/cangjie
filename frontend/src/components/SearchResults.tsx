@@ -61,7 +61,7 @@ export default function SearchResults({ results }: SearchResultsProps) {
               key={node.id || i}
               type="button"
               className="text-left"
-              onClick={() => navigate('/graph')}
+              onClick={() => navigate('/cosmos')}
             >
               <NodeCard
                 nodeType={node.node_type}

@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar';
 import { CommandPalette } from './CommandPalette';
 import { useAppKeyboard } from './useKeyboard';
 
-const CANVAS_ROUTES = ['/graph', '/draft', '/extract', '/proposal', '/clustering'];
+const CANVAS_ROUTES = ['/cosmos', '/galaxy', '/draft', '/extract', '/proposal', '/clustering'];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [cmdOpen, setCmdOpen] = useState(false);

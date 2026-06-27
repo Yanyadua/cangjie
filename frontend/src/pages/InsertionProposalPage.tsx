@@ -49,7 +49,7 @@ export default function InsertionProposalPage() {
     try {
       const result = await applyInsertionProposal(id);
       if (result.status === 'applied') {
-        navigate('/graph');
+        navigate('/cosmos');
       } else {
         setError('应用失败: ' + JSON.stringify(result.errors || result.error));
       }

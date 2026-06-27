@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 const ROUTES: Record<string, string> = {
   '1': '/import',
   '2': '/history',
-  '3': '/graph',
+  '3': '/cosmos',
   '4': '/search',
   '5': '/ask',
 };

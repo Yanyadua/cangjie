@@ -171,7 +171,7 @@ export default function ClusteringProposalPage() {
         alert(
           `应用成功\n\n入库统计：\n${summary || '无知识节点'}\n知识边：${result.knowledge_edges_created || 0}`
         );
-        navigate('/graph');
+        navigate('/cosmos');
       } else {
         setError('应用失败: ' + JSON.stringify(result.errors || result.error));
       }

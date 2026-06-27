@@ -93,7 +93,7 @@ export default function AskPage() {
                         <button
                           key={`${ev.source}-${i}`}
                           type="button"
-                          onClick={() => navigate('/graph')}
+                          onClick={() => navigate('/cosmos')}
                           title={ev.text}
                           aria-label={`查看来源：${ev.document_title || ev.source}`}
                           className="inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border border-transparent bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 const NAV = [
   { to: '/import', label: '导入', icon: Upload },
   { to: '/history', label: '历史', icon: Clock },
-  { to: '/graph', label: '我的图谱', icon: Network },
+  { to: '/cosmos', label: '宇宙', icon: Network },
   { to: '/partitions', label: '分区', icon: Layers },
   { to: '/merge', label: '合并', icon: GitMerge },
   { to: '/search', label: '搜索', icon: Search },

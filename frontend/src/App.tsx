@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { StarfieldBg } from './components/cosmos';
 import ImportPage from './pages/ImportPage';
@@ -6,7 +6,8 @@ import ExtractionWizardPage from './pages/ExtractionWizardPage';
 import HistoryPage from './pages/HistoryPage';
 import DraftGraphPage from './pages/DraftGraphPage';
 import InsertionProposalPage from './pages/InsertionProposalPage';
-import GlobalGraphPage from './pages/GlobalGraphPage';
+import CosmosPage from './pages/CosmosPage';
+import GalaxyPage from './pages/GalaxyPage';
 import SearchPage from './pages/SearchPage';
 import AskPage from './pages/AskPage';
 import ClusteringProposalPage from './pages/ClusteringProposalPage';
@@ -28,7 +29,11 @@ export default function App() {
           <Route path="/draft/:id" element={<DraftGraphPage />} />
           <Route path="/proposal/:id" element={<InsertionProposalPage />} />
           <Route path="/clustering/:id" element={<ClusteringProposalPage />} />
-          <Route path="/graph" element={<GlobalGraphPage />} />
+          {/* Cosmic UI routes (M0: CosmosPage degrades to RadialKnowledgeGraph) */}
+          <Route path="/cosmos" element={<CosmosPage />} />
+          <Route path="/galaxy/:id" element={<GalaxyPage />} />
+          {/* Legacy /graph redirects to /cosmos */}
+          <Route path="/graph" element={<Navigate to="/cosmos" replace />} />
           <Route path="/partitions" element={<PartitionsPage />} />
           <Route path="/merge" element={<MergePage />} />
           <Route path="/eval" element={<EvaluationLabPage />} />
