@@ -15,17 +15,25 @@ const VERT = /* glsl */ `
 const FRAG_SIMPLE = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
-  #define EVENT_HORIZON_R 0.30
-  #define DISK_OUTER_R    1.00
+  #define HORIZON_R 0.48
+  #define HALO_R    1.00
   void main() {
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
-    if (r < EVENT_HORIZON_R) { gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
-    if (r > DISK_OUTER_R)    { gl_FragColor = vec4(0.0,0.0,0.0,0.0); return; }
-    // flat amber disk, slight radial falloff
-    vec3 amber = vec3(0.961, 0.620, 0.043);
-    float fade = 1.0 - smoothstep(0.6, 1.0, r);
-    gl_FragColor = vec4(amber * fade * 1.4, 1.0);
+    if (r > HALO_R)    { gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0); return; }
+    if (r < HORIZON_R) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    float t = (r - HORIZON_R) / (HALO_R - HORIZON_R);
+    // static dim ember → violet halo, no animation
+    vec3 inner = vec3(0.18, 0.04, 0.06);
+    vec3 outer = vec3(0.05, 0.02, 0.12);
+    vec3 col = mix(inner, outer, t);
+    col *= pow(1.0 - t, 2.0);
+    col *= smoothstep(0.0, 0.08, t);
+    // thin dim photon ring
+    float ring = exp(-abs(r - (HORIZON_R + 0.015)) * 180.0);
+    col += vec3(0.36, 0.22, 0.17) * ring * 0.50;
+    float alpha = 1.0 - smoothstep(0.75, 1.0, t);
+    gl_FragColor = vec4(col, alpha);
   }
 `;
 
@@ -34,77 +42,94 @@ const FRAG = /* glsl */ `
   varying vec2 vUv;
   uniform float uTime;
 
-  // design §2.6 constants (normalized radii within the quad)
-  #define EVENT_HORIZON_R 0.30
-  #define PHOTON_SPHERE_R 0.33
-  #define DISK_INNER_R    0.35
-  #define DISK_OUTER_R    1.00
-  #define DOPPLER_STRENGTH 0.6
+  // Horizon fills most of the quad so the black body dominates — reads
+  // as a solid celestial object rather than a ring with a hole.
+  #define HORIZON_R 0.48
+  #define HALO_R    1.00
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+  // Additive fbm — the verified-working formulation. Stable across drivers.
+  float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+      v += a * noise(p);
+      p *= 2.0;
+      a *= 0.5;
+    }
+    return v;
+  }
 
   void main() {
-    // vUv is [0,1]; remap to [-1,1] centered on hole
     vec2 p = vUv * 2.0 - 1.0;
     float r = length(p);
+    float angle = atan(p.y, p.x);
 
-    // Event horizon — pure black
-    if (r < EVENT_HORIZON_R) {
-      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    // Beyond halo — transparent
+    if (r > HALO_R) { gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0); return; }
+
+    // Non-circular horizon — gentle fbm warp of the silhouette. Additive
+    // fbm (verified compiling) keeps the radius safely in [0.46, 0.50].
+    float warp = (fbm(vec2(angle * 2.0, uTime * 0.04)) - 0.5) * 0.04;
+    float horizonR = HORIZON_R + warp;
+
+    // Solid event horizon — the body of the celestial object. Not dead
+    // black: a near-invisible deep-red fbm churn hints at slow surface
+    // rotation, so it reads as a dark sphere, not a flat hole.
+    if (r < horizonR) {
+      float surf = fbm(vec2(angle * 2.0 + uTime * 0.05, r * 6.0));
+      vec3 deep = vec3(0.018, 0.006, 0.014) * surf;
+      gl_FragColor = vec4(deep, 1.0);
       return;
     }
 
-    // Photon ring — thin bright white-hot ring just outside horizon
-    float ringThickness = 0.015;
-    float ringDist = abs(r - PHOTON_SPHERE_R);
-    if (ringDist < ringThickness) {
-      float intensity = 1.0 - ringDist / ringThickness;
-      vec3 ringColor = vec3(1.0, 0.98, 0.92); // near-white
-      gl_FragColor = vec4(ringColor * intensity * 2.0, 1.0);
-      return;
-    }
+    // Halo normalized radius [0,1]
+    float t = (r - horizonR) / (HALO_R - horizonR);
 
-    // Accretion disk — between DISK_INNER_R and DISK_OUTER_R
-    if (r >= DISK_INNER_R && r <= DISK_OUTER_R) {
-      // Normalized disk radial position [0,1] inner→outer
-      float t = (r - DISK_INNER_R) / (DISK_OUTER_R - DISK_INNER_R);
+    // Keplerian flow: inner orbits advance faster (chrismatgit form).
+    float spiralAng = angle + uTime * 0.06 - 0.4 / sqrt(r);
+    vec2 polarUV = vec2(spiralAng * 1.5, r * 4.2);
+    float swirl = fbm(polarUV);
+    swirl = pow(swirl, 1.25);
 
-      // Keplerian rotation: angular speed inversely proportional to sqrt(r).
-      // Inner (~r=0.35): ~4s/turn. Outer (~r=1.0): ~30s/turn.
-      float angSpeed = 1.5 / sqrt(r);
-      float angle = atan(p.y, p.x);
-      float rotated = angle + uTime * angSpeed;
+    // Logarithmic spiral arms — angle winds tighter toward the center,
+    // reinforces the rotational reading of the halo.
+    float arm = 0.5 + 0.5 * sin(spiralAng * 3.0 - log(r) * 5.0);
+    swirl *= 0.55 + 0.45 * arm;
 
-      // Procedural disk texture: spiral streaks
-      float streak = 0.5 + 0.5 * sin(rotated * 8.0 + t * 20.0);
-      streak = mix(0.7, 1.0, streak);
+    // Dim halo palette (darkened).
+    vec3 inner = vec3(0.18, 0.04, 0.06);
+    vec3 outer = vec3(0.05, 0.02, 0.13);
+    vec3 col = mix(inner, outer, smoothstep(0.0, 0.9, t));
+    col *= swirl * 0.6 + 0.12;
+    col *= pow(1.0 - t, 2.2);
 
-      // Temperature gradient LUT (design §2.6)
-      vec3 inner = vec3(1.0, 0.953, 0.780);   // #fef3c7 white-hot
-      vec3 mid   = vec3(0.961, 0.620, 0.043); // #f59e0b amber
-      vec3 outer = vec3(0.486, 0.176, 0.071); // #7c2d12 dark red
-      vec3 temp;
-      if (t < 0.5) temp = mix(inner, mid, t * 2.0);
-      else         temp = mix(mid, outer, (t - 0.5) * 2.0);
+    // Anisotropic brightness — one rotating side brighter (Doppler-ish),
+    // breaks rotational symmetry so the halo isn't a uniform flat ring.
+    float aniso = 0.65 + 0.35 * cos(angle - uTime * 0.04);
+    col *= aniso;
 
-      // Falloff at the outer edge so the disk dissolves into space
-      float edgeFade = 1.0 - smoothstep(0.85, 1.0, t);
+    // Distance-inverse glow near the horizon (chrismatgit-style soft bloom).
+    float glow = clamp(0.06 / r, 0.0, 1.0);
+    col += vec3(0.25, 0.08, 0.06) * glow * swirl * 0.30;
 
-      vec3 col = temp * streak * edgeFade;
-      // Doppler beaming — +x approaching (brighter/bluer), -x receding (dimmer/redder)
-      float doppler = DOPPLER_STRENGTH * (p.x / r); // [-strength, +strength]
-      float beamFactor = 1.0 + doppler;              // brightness modulation
-      // Color shift: approach → star-blue, recede → star-red
-      vec3 blueShift = vec3(0.576, 0.773, 0.992);    // #93c5fd
-      vec3 redShift  = vec3(0.988, 0.647, 0.647);    // #fca5a5
-      vec3 shift = mix(redShift, blueShift, doppler * 1.67 + 0.5); // map [-0.6,0.6]→[0,1]
-      col = mix(col, col * shift, abs(doppler) * 0.8);
-      col *= beamFactor;
-      // Brightness pumped up — will read as glow even without Bloom (M4)
-      gl_FragColor = vec4(col * 1.6, 1.0);
-      return;
-    }
+    // Thin dim photon ring — follows the warped silhouette.
+    float ringR = horizonR + 0.015;
+    float ring = exp(-abs(r - ringR) * 180.0);
+    col += vec3(0.38, 0.24, 0.19) * ring * 0.55;
 
-    // Beyond the disk — transparent
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+    col *= smoothstep(0.0, 0.08, t);
+    float alpha = 1.0 - smoothstep(0.75, 1.0, t);
+    gl_FragColor = vec4(col, alpha);
   }
 `;
 
@@ -116,7 +141,7 @@ export interface BlackHoleProps {
   simple?: boolean;
 }
 
-export default function BlackHole({ position = [0, 0, 0], size = 1.2, simple = false }: BlackHoleProps) {
+export default function BlackHole({ position = [0, 0, 0], size = 1.4, simple = false }: BlackHoleProps) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
 
   const uniforms = useMemo(

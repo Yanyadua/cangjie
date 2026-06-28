@@ -5,6 +5,7 @@ import { Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { CosmosScene } from '../../lib/cosmos-mappers';
 import { getGpuTier } from '../../lib/gpu-tier';
+import AccretionParticles from './AccretionParticles';
 import BlackHole from './BlackHole';
 import GalaxyNode from './GalaxyNode';
 
@@ -61,6 +62,7 @@ export default function CosmosCanvas({ scene, onGalaxyClick }: CosmosCanvasProps
       <ambientLight intensity={0.4} />
       <pointLight position={[0, 0, 0]} intensity={2} distance={20} color="#f59e0b" />
       <BlackHole position={[0, 0, 0]} simple={tier.tier === 3} />
+      <AccretionParticles count={tier.tier === 3 ? 180 : 520} />
       {scene.rootEdges.map((e, i) => {
         const partitionId = e.source === scene.blackHole?.id ? e.target : e.source;
         const idx = scene.galaxies.findIndex(g => g.id === partitionId);
