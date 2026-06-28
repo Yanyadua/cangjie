@@ -133,6 +133,33 @@ export default function GalaxyPage() {
         </div>
       </div>
 
+      {/* Top-left breadcrumb */}
+      {!loading && !isEmpty && !error && (
+        <div className="absolute left-3 top-3 z-10 flex items-center gap-1 text-xs text-text-muted">
+          <button
+            type="button"
+            onClick={() => navigate('/cosmos')}
+            className="rounded px-1.5 py-1 hover:bg-surface hover:text-text"
+          >
+            宇宙
+          </button>
+          <span className="text-text-subtle">›</span>
+          <span className="max-w-[200px] truncate px-1.5 py-1 font-semibold text-text">
+            {scene?.partition?.name ?? '星系'}
+          </span>
+        </div>
+      )}
+
+      {use3D && scene && expandedTopicIds.size > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpandedTopicIds(new Set())}
+          className="absolute left-3 top-12 z-10 rounded-full bg-surface/80 px-2 py-1 text-[10px] text-text-muted backdrop-blur hover:bg-surface"
+        >
+          收起所有主题
+        </button>
+      )}
+
       {/* Top-right legend */}
       <Card className="absolute right-3 top-3 z-10 gap-0 py-2 shadow-md">
         <CardContent className="flex items-center gap-3 px-3">
