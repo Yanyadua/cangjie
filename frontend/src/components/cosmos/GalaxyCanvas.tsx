@@ -1,5 +1,5 @@
 // frontend/src/components/cosmos/GalaxyCanvas.tsx
-import { Fragment, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -40,8 +40,8 @@ function layoutTopics(count: number, opts?: { armCount?: number; radius?: number
 function layoutOrphanRing(count: number, radius = 1.1): Array<[number, number, number]> {
   const out: Array<[number, number, number]> = [];
   for (let i = 0; i < count; i++) {
-    const a = (i / Math.max(count, 1)) * Math.PI * 2;
-    out.push([Math.cos(a) * radius, Math.sin(a) * radius, 0.1]);
+    const angle = (i / Math.max(count, 1)) * Math.PI * 2;
+    out.push([Math.cos(angle) * radius, Math.sin(angle) * radius, 0.1]);
   }
   return out;
 }
