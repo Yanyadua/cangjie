@@ -42,7 +42,7 @@ export interface GalaxyScene {
  * - orphanArticles = 'article' nodes NOT linked to any topic via `tag` (e.g. legacy `belongs_to` partition link)
  * - topicEdges = edges where BOTH endpoints are topics (lateral semantic links)
  *
- * Wire format (backend): node_type / relation_type (snake_case).
+ * Input: GraphNode[] / GraphEdge[] (camelCase, already converted from backend wire by graphJsonToGraphData).
  */
 export function localGraphToGalaxyScene(
   nodes: GraphNode[],
@@ -59,18 +59,27 @@ export function localGraphToGalaxyScene(
 
   const topicNodes = nodes.filter(n => n.nodeType === 'topic');
   const articleNodes = nodes.filter(n => n.nodeType === 'article');
+  const topicIdSet = new Set(topicNodes.map(t => t.id));
+  const articleIdSet = new Set(articleNodes.map(a => a.id));
 
   // Build topicId → articleIds index from `tag` edges (either direction).
   const topicToArticles = new Map<string, string[]>();
   for (const e of edges) {
     if (e.relationType !== 'tag') continue;
-    const topicId = e.source === e.target ? null : (
-      topicNodes.find(t => t.id === e.source || t.id === e.target)?.id ?? null
-    );
-    if (!topicId) continue;
-    const otherId = e.source === topicId ? e.target : e.source;
-    // only count if the other endpoint is an article
-    if (!articleNodes.some(a => a.id === otherId)) continue;
+    if (e.source === e.target) continue; // self-loop
+    // exactly one endpoint must be a topic; the other an article
+    const sourceIsTopic = topicIdSet.has(e.source);
+    const targetIsTopic = topicIdSet.has(e.target);
+    let topicId: string | null = null;
+    let otherId: string | null = null;
+    if (sourceIsTopic && !targetIsTopic && articleIdSet.has(e.target)) {
+      topicId = e.source;
+      otherId = e.target;
+    } else if (targetIsTopic && !sourceIsTopic && articleIdSet.has(e.source)) {
+      topicId = e.target;
+      otherId = e.source;
+    }
+    if (!topicId || !otherId) continue;
     const arr = topicToArticles.get(topicId) ?? [];
     arr.push(otherId);
     topicToArticles.set(topicId, arr);
@@ -83,13 +92,13 @@ export function localGraphToGalaxyScene(
       .filter((a): a is GraphNode => !!a)
       .map(a => ({
         id: a.id,
-        name: a.name,
+        name: a.name || '未命名文章',
         description: a.description,
         node: a,
       }));
     return {
       id: t.id,
-      name: t.name,
+      name: t.name || '未命名主题',
       description: t.description,
       articles,
       node: t,
@@ -105,13 +114,12 @@ export function localGraphToGalaxyScene(
     .filter(a => !taggedArticleIds.has(a.id))
     .map(a => ({
       id: a.id,
-      name: a.name,
+      name: a.name || '未命名文章',
       description: a.description,
       node: a,
     }));
 
   // Lateral topic↔topic edges (both endpoints are topics)
-  const topicIdSet = new Set(topicNodes.map(t => t.id));
   const topicEdges = edges.filter(
     e => topicIdSet.has(e.source) && topicIdSet.has(e.target) && e.source !== e.target,
   );
@@ -120,9 +128,15 @@ export function localGraphToGalaxyScene(
 }
 
 /**
- * Apply the M2 article-count cap (design §5.7).
- * If total article count exceeds `maxArticles`, drop articles from topics with the FEWEST
- * articles first (lowest-priority topics). Returns a new scene + the number dropped.
+ * Apply the M2 article-count cap (design §5.7: "折叠低优先级 topic").
+ * Strategy: when total article count exceeds `maxArticles`, fully empty topics
+ * with the FEWEST articles first (preserving the topic node itself, just clearing
+ * its `articles` array). If still over after emptying all topics, trim orphans
+ * from the end. Returns a new scene + the number of articles dropped.
+ *
+ * Note: this is a "collapse whole topics" strategy, not partial trimming.
+ * Rationale: a half-trimmed topic cluster looks visually broken; either show
+ * all of a topic's articles or none.
  */
 export function capArticles(scene: GalaxyScene, maxArticles = 200): {
   scene: GalaxyScene;
