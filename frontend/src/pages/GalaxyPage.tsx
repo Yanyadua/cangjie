@@ -26,6 +26,12 @@ const LEGEND_3D = [
   { label: '文章星', color: 'var(--node-article)' },
 ];
 
+const LEGEND_2D = [
+  { label: '分区', color: 'var(--node-partition)' },
+  { label: '主题', color: 'var(--node-topic)' },
+  { label: '文章', color: 'var(--node-article)' },
+];
+
 export default function GalaxyPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -48,6 +54,8 @@ export default function GalaxyPage() {
   const isEmpty = !loading && graphData.nodes.length === 0;
   const use3D =
     tier.tier <= 3 && !isCoarse && !isNarrow && !loading && !isEmpty && !error;
+
+  const legend = use3D ? LEGEND_3D : LEGEND_2D;
 
   const { scene, dropped } = useMemo(() => {
     if (!use3D) return { scene: null, dropped: 0 };
@@ -105,7 +113,7 @@ export default function GalaxyPage() {
       {/* Top-right legend */}
       <Card className="absolute right-3 top-3 z-10 gap-0 py-2 shadow-md">
         <CardContent className="flex items-center gap-3 px-3">
-          {LEGEND_3D.map(l => (
+          {legend.map(l => (
             <div key={l.label} className="flex items-center gap-1">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ background: l.color }} />
               <span className="text-xs text-text-muted">{l.label}</span>
