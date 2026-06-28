@@ -192,17 +192,8 @@ export default function GalaxyPage() {
               onArticleClick={handleArticleClick}
               onArticleHover={setHoveredArticleId}
               onPartitionHover={setPartitionHovered}
+              partitionHovered={partitionHovered}
             />
-            {partitionHovered && scene.partition && (
-              <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 translate-y-8 rounded-md bg-surface/95 px-3 py-1.5 text-xs text-text shadow-md">
-                <div className="font-semibold">{scene.partition.name}</div>
-                {scene.partition.description && (
-                  <div className="text-[10px] text-text-muted">
-                    {Array.from(scene.partition.description).slice(0, 60).join('')}
-                  </div>
-                )}
-              </div>
-            )}
             {dropped > 0 && (
               <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-surface/80 px-3 py-1 text-[10px] text-text-muted backdrop-blur">
                 更多 {dropped} 篇文章已折叠

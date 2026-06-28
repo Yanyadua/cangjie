@@ -1,9 +1,15 @@
 // frontend/src/components/cosmos/TopicCluster.tsx
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { Billboard, Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import ArticleStar, { type ArticleStarProps } from './ArticleStar';
+
+export interface ArticleChild {
+  id: string;
+  position: [number, number, number];
+  data: ArticleStarProps;
+}
 
 export interface TopicClusterProps {
   position: [number, number, number];
@@ -12,10 +18,8 @@ export interface TopicClusterProps {
   articleCount: number;
   expanded: boolean;
   /** only used when expanded — the actual article children to render */
-  articles?: Array<{
-    position: [number, number, number];
-    data: ArticleStarProps;
-  }>;
+  articles?: ArticleChild[];
+  hoveredArticleId?: string | null;
   color?: string;
   onClick?: () => void;
   onHover?: (hovering: boolean) => void;
@@ -46,6 +50,7 @@ export default function TopicCluster({
   articleCount,
   expanded,
   articles,
+  hoveredArticleId,
   color = '#ac92d6',
   onClick,
   onHover,
@@ -117,10 +122,26 @@ export default function TopicCluster({
 
       {/* Article children — only rendered when expanded.
           Caller-supplied positions in `articles[].position` win over `data.position`. */}
-      {expanded && articles?.map(({ position: aPos, data }, i) => {
-        const { position: _ignored, ...rest } = data;
-        return <ArticleStar key={`art-${i}`} position={aPos} {...rest} />;
-      })}
+      {expanded && articles?.map((child) => (
+        <Fragment key={`art-${child.id}`}>
+          <ArticleStar
+            position={child.position}
+            name={child.data.name}
+            color={child.data.color}
+            onClick={child.data.onClick}
+            onHover={child.data.onHover}
+          />
+          {hoveredArticleId === child.id && (
+            <Html position={child.position} center distanceFactor={10} zIndexRange={[20, 0]}>
+              <div className="pointer-events-none rounded-md bg-surface/95 px-2 py-1 text-xs text-text shadow-md">
+                <div className="font-semibold">
+                  {Array.from(child.data.name).slice(0, 30).join('')}
+                </div>
+              </div>
+            </Html>
+          )}
+        </Fragment>
+      ))}
     </group>
   );
 }

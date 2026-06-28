@@ -1,7 +1,7 @@
 // frontend/src/components/cosmos/GalaxyCanvas.tsx
-import { useEffect, useMemo } from 'react';
+import { Fragment, useEffect, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Line } from '@react-three/drei';
+import { Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { GalaxyScene } from '../../lib/galaxy-mappers';
 import { getGpuTier } from '../../lib/gpu-tier';
@@ -67,6 +67,27 @@ function Cleanup() {
   return null;
 }
 
+function Tooltip({ position, title, subtitle }: {
+  position: [number, number, number];
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <Html position={position} center distanceFactor={10} zIndexRange={[20, 0]}>
+      <div className="pointer-events-none rounded-md bg-surface/95 px-2 py-1 text-xs text-text shadow-md">
+        <div className="font-semibold">
+          {Array.from(title).slice(0, 30).join('')}
+        </div>
+        {subtitle && (
+          <div className="text-[10px] text-text-muted">
+            {Array.from(subtitle).slice(0, 60).join('')}
+          </div>
+        )}
+      </div>
+    </Html>
+  );
+}
+
 export interface GalaxyCanvasProps {
   scene: GalaxyScene;
   expandedTopicIds: Set<string>;
@@ -77,18 +98,20 @@ export interface GalaxyCanvasProps {
   onArticleClick: (articleId: string) => void;
   onArticleHover: (articleId: string | null) => void;
   onPartitionHover: (hovering: boolean) => void;
+  partitionHovered: boolean;
 }
 
 export default function GalaxyCanvas({
   scene,
   expandedTopicIds,
-  hoveredTopicId: _hoveredTopicId,
-  hoveredArticleId: _hoveredArticleId,
+  hoveredTopicId,
+  hoveredArticleId,
   onTopicClick,
   onTopicHover,
   onArticleClick,
   onArticleHover,
   onPartitionHover,
+  partitionHovered,
 }: GalaxyCanvasProps) {
   const tier = getGpuTier();
   // dim ambient on tier 3 to save fill-rate
@@ -121,6 +144,13 @@ export default function GalaxyCanvas({
           onHover={onPartitionHover}
         />
       )}
+      {scene.partition && partitionHovered && (
+        <Tooltip
+          position={[0, 0, 0]}
+          title={scene.partition.name}
+          subtitle={scene.partition.description}
+        />
+      )}
 
       {/* Topic clusters on spiral arms */}
       {scene.topics.map((t, i) => {
@@ -131,6 +161,7 @@ export default function GalaxyCanvas({
           ? layoutArticleCluster(t.articles.length)
           : [];
         const articleChildren = t.articles.map((a, ai) => ({
+          id: a.id,
           position: articlePositions[ai] ?? [0, 0, 0] as [number, number, number],
           data: {
             name: a.name,
@@ -139,18 +170,27 @@ export default function GalaxyCanvas({
           } as ArticleStarProps,
         }));
         return (
-          <TopicCluster
-            key={t.id}
-            position={pos}
-            name={t.name}
-            description={t.description}
-            articleCount={t.articles.length}
-            expanded={expanded}
-            articles={articleChildren}
-            color="#ac92d6"
-            onClick={() => onTopicClick(t.id)}
-            onHover={(h) => onTopicHover(h ? t.id : null)}
-          />
+          <Fragment key={t.id}>
+            <TopicCluster
+              position={pos}
+              name={t.name}
+              description={t.description}
+              articleCount={t.articles.length}
+              expanded={expanded}
+              articles={articleChildren}
+              hoveredArticleId={hoveredArticleId}
+              color="#ac92d6"
+              onClick={() => onTopicClick(t.id)}
+              onHover={(h) => onTopicHover(h ? t.id : null)}
+            />
+            {hoveredTopicId === t.id && (
+              <Tooltip
+                position={pos}
+                title={t.name}
+                subtitle={t.description || `${t.articles.length} 篇文章`}
+              />
+            )}
+          </Fragment>
         );
       })}
 
