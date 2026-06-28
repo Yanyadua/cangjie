@@ -1,5 +1,5 @@
 // frontend/src/components/cosmos/TopicCluster.tsx
-import { Fragment, useRef } from 'react';
+import { Fragment, useRef, useMemo } from 'react';
 import { Billboard, Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -57,8 +57,15 @@ export default function TopicCluster({
 }: TopicClusterProps) {
   const groupRef = useRef<THREE.Group>(null);
 
+  const reducedMotion = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
   useFrame((_, delta) => {
-    if (groupRef.current && expanded) groupRef.current.rotation.z += delta * 0.04;
+    if (groupRef.current && expanded && !reducedMotion) groupRef.current.rotation.z += delta * 0.04;
   });
 
   // Visual radius pulses with article count (capped)

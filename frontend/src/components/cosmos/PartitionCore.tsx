@@ -1,5 +1,5 @@
 // frontend/src/components/cosmos/PartitionCore.tsx
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { Billboard } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -19,8 +19,15 @@ export default function PartitionCore({
 }: PartitionCoreProps) {
   const groupRef = useRef<THREE.Group>(null);
 
+  const reducedMotion = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
   useFrame((_, delta) => {
-    if (groupRef.current) groupRef.current.rotation.z += delta * 0.03;
+    if (groupRef.current && !reducedMotion) groupRef.current.rotation.z += delta * 0.03;
   });
 
   return (
