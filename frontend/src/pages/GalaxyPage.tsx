@@ -75,7 +75,16 @@ export default function GalaxyPage() {
     setError('');
     try {
       const result = await getLocalGraph(id, 2);
-      setGraphData(graphJsonToGraphData(result));
+      const data = graphJsonToGraphData(result);
+      setGraphData(data);
+      // Seed expanded topics: those with 1-3 articles (immediate content, no overwhelming sprawl)
+      const raw = localGraphToGalaxyScene(data.nodes, data.edges);
+      const initial = new Set<string>(
+        raw.topics
+          .filter(t => t.articles.length > 0 && t.articles.length <= 3)
+          .map(t => t.id),
+      );
+      setExpandedTopicIds(initial);
     } catch (e: unknown) {
       setError(toErrorMessage(e));
     } finally {

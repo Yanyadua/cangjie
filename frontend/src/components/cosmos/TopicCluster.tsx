@@ -1,6 +1,6 @@
 // frontend/src/components/cosmos/TopicCluster.tsx
 import { useRef } from 'react';
-import { Billboard } from '@react-three/drei';
+import { Billboard, Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import ArticleStar, { type ArticleStarProps } from './ArticleStar';
@@ -105,6 +105,15 @@ export default function TopicCluster({
           )}
         </group>
       </Billboard>
+
+      {/* Count badge — only when collapsed and has articles */}
+      {!expanded && articleCount > 0 && (
+        <Html position={[0.22, 0.22, 0]} center distanceFactor={10} zIndexRange={[10, 0]}>
+          <div className="pointer-events-none flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-400/90 px-1 text-[9px] font-semibold text-white shadow-sm">
+            {articleCount}
+          </div>
+        </Html>
+      )}
 
       {/* Article children — only rendered when expanded.
           Caller-supplied positions in `articles[].position` win over `data.position`. */}
