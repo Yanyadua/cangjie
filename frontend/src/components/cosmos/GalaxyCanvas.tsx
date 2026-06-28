@@ -1,6 +1,6 @@
 // frontend/src/components/cosmos/GalaxyCanvas.tsx
-import { Fragment, useEffect, useMemo } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { GalaxyScene } from '../../lib/galaxy-mappers';
@@ -38,6 +38,16 @@ function layoutTopics(count: number, opts?: { armCount?: number; radius?: number
   return positions;
 }
 
+const DOLLY_DURATION = 1.2; // seconds
+const START_POS = new THREE.Vector3(0, 8, 24);   // far back, elevated
+const END_POS = new THREE.Vector3(0, 4, 14);     // default viewing position
+const DOLLY_TARGET = new THREE.Vector3(0, 0, 0); // always look at the core
+
+// easeInOutCubic
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 /** Orphan articles ring around the partition core (no parent topic). */
 function layoutOrphanRing(count: number, radius = 1.1): Array<[number, number, number]> {
   const out: Array<[number, number, number]> = [];
@@ -65,6 +75,33 @@ function Cleanup() {
       gl.dispose();
     };
   }, [gl, scene]);
+  return null;
+}
+
+/** Camera dolly-in on mount. Lives inside <Canvas>. Snaps on reduced-motion. */
+function CameraDolly() {
+  const camera = useThree((s) => s.camera);
+  const elapsed = useRef(0);
+  const reducedMotion = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
+  useFrame((_, delta) => {
+    if (reducedMotion) {
+      camera.position.copy(END_POS);
+      camera.lookAt(DOLLY_TARGET);
+      return;
+    }
+    elapsed.current += delta;
+    const t = Math.min(1, elapsed.current / DOLLY_DURATION);
+    const eased = easeInOutCubic(t);
+    camera.position.lerpVectors(START_POS, END_POS, eased);
+    camera.lookAt(DOLLY_TARGET);
+  });
+
   return null;
 }
 
@@ -108,11 +145,12 @@ export default function GalaxyCanvas({
 
   return (
     <Canvas
-      camera={{ position: [0, 4, 14], fov: 50 }}
+      camera={{ position: [0, 8, 24], fov: 50 }}
       gl={{ alpha: true, antialias: true }}
       style={{ position: 'absolute', inset: 0, background: 'transparent' }}
     >
       <Cleanup />
+      <CameraDolly />
       <ambientLight intensity={ambient} />
       <pointLight position={[0, 0, 0]} intensity={2.5} distance={25} color="#818cf8" />
       <NebulaBg count={tier.tier === 3 ? 150 : 400} radius={7} color="#4c1d95" />
