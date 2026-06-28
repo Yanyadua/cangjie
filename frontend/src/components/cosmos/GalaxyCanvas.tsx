@@ -5,6 +5,7 @@ import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { GalaxyScene } from '../../lib/galaxy-mappers';
 import { getGpuTier } from '../../lib/gpu-tier';
+import NebulaBg from './NebulaBg';
 import PartitionCore from './PartitionCore';
 import TopicCluster, { layoutArticleCluster } from './TopicCluster';
 import ArticleStar, { type ArticleStarProps } from './ArticleStar';
@@ -111,6 +112,7 @@ export default function GalaxyCanvas({
       <Cleanup />
       <ambientLight intensity={ambient} />
       <pointLight position={[0, 0, 0]} intensity={2.5} distance={25} color="#818cf8" />
+      <NebulaBg count={tier.tier === 3 ? 150 : 400} radius={7} color="#4c1d95" />
       {scene.partition && (
         <PartitionCore
           position={[0, 0, 0]}
