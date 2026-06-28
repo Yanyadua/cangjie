@@ -44,6 +44,11 @@ export default function GalaxyPage() {
   const [error, setError] = useState('');
   const [partitionHovered, setPartitionHovered] = useState(false);
 
+  // Galaxy interaction state (M2 Task 4)
+  const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set());
+  const [hoveredTopicId, setHoveredTopicId] = useState<string | null>(null);
+  const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
+
   // ArticleSheet state
   const [selectedArticle, setSelectedArticle] = useState<GraphNode | null>(null);
   const [articleGraph, setArticleGraph] = useState<GraphData | null>(null);
@@ -94,6 +99,15 @@ export default function GalaxyPage() {
       /* ignore subgraph fetch errors */
     }
   }, [graphData.nodes]);
+
+  const handleTopicClick = useCallback((topicId: string) => {
+    setExpandedTopicIds(prev => {
+      const next = new Set(prev);
+      if (next.has(topicId)) next.delete(topicId);
+      else next.add(topicId);
+      return next;
+    });
+  }, []);
 
   const handleSheetOpenChange = (open: boolean) => {
     if (!open) setSelectedArticle(null);
@@ -161,6 +175,13 @@ export default function GalaxyPage() {
           <div className="galaxy-canvas h-full w-full">
             <GalaxyCanvas
               scene={scene}
+              expandedTopicIds={expandedTopicIds}
+              hoveredTopicId={hoveredTopicId}
+              hoveredArticleId={hoveredArticleId}
+              onTopicClick={handleTopicClick}
+              onTopicHover={setHoveredTopicId}
+              onArticleClick={handleArticleClick}
+              onArticleHover={setHoveredArticleId}
               onPartitionHover={setPartitionHovered}
             />
             {partitionHovered && scene.partition && (
