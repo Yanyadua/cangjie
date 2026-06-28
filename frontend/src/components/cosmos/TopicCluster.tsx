@@ -4,6 +4,7 @@ import { Billboard, Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import ArticleStar, { type ArticleStarProps } from './ArticleStar';
+import Tooltip from './Tooltip';
 
 export interface ArticleChild {
   id: string;
@@ -14,7 +15,6 @@ export interface ArticleChild {
 export interface TopicClusterProps {
   position: [number, number, number];
   name: string;
-  description?: string;
   articleCount: number;
   expanded: boolean;
   /** only used when expanded — the actual article children to render */
@@ -132,13 +132,7 @@ export default function TopicCluster({
             onHover={child.data.onHover}
           />
           {hoveredArticleId === child.id && (
-            <Html position={child.position} center distanceFactor={10} zIndexRange={[20, 0]}>
-              <div className="pointer-events-none rounded-md bg-surface/95 px-2 py-1 text-xs text-text shadow-md">
-                <div className="font-semibold">
-                  {Array.from(child.data.name).slice(0, 30).join('')}
-                </div>
-              </div>
-            </Html>
+            <Tooltip position={child.position} title={child.data.name} />
           )}
         </Fragment>
       ))}

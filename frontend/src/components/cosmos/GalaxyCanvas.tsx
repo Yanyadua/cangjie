@@ -1,7 +1,7 @@
 // frontend/src/components/cosmos/GalaxyCanvas.tsx
 import { Fragment, useEffect, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Line, Html } from '@react-three/drei';
+import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { GalaxyScene } from '../../lib/galaxy-mappers';
 import { getGpuTier } from '../../lib/gpu-tier';
@@ -9,6 +9,7 @@ import NebulaBg from './NebulaBg';
 import PartitionCore from './PartitionCore';
 import TopicCluster, { layoutArticleCluster } from './TopicCluster';
 import ArticleStar, { type ArticleStarProps } from './ArticleStar';
+import Tooltip from './Tooltip';
 
 /** Log-spiral layout for topics. Returns world positions for each topic. */
 function layoutTopics(count: number, opts?: { armCount?: number; radius?: number }): Array<[number, number, number]> {
@@ -65,27 +66,6 @@ function Cleanup() {
     };
   }, [gl, scene]);
   return null;
-}
-
-function Tooltip({ position, title, subtitle }: {
-  position: [number, number, number];
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <Html position={position} center distanceFactor={10} zIndexRange={[20, 0]}>
-      <div className="pointer-events-none rounded-md bg-surface/95 px-2 py-1 text-xs text-text shadow-md">
-        <div className="font-semibold">
-          {Array.from(title).slice(0, 30).join('')}
-        </div>
-        {subtitle && (
-          <div className="text-[10px] text-text-muted">
-            {Array.from(subtitle).slice(0, 60).join('')}
-          </div>
-        )}
-      </div>
-    </Html>
-  );
 }
 
 export interface GalaxyCanvasProps {
@@ -174,7 +154,6 @@ export default function GalaxyCanvas({
             <TopicCluster
               position={pos}
               name={t.name}
-              description={t.description}
               articleCount={t.articles.length}
               expanded={expanded}
               articles={articleChildren}
@@ -215,16 +194,23 @@ export default function GalaxyCanvas({
       })}
 
       {/* Orphan articles in ring around core */}
-      {scene.orphanArticles.map((a, i) => (
-        <ArticleStar
-          key={`orph-${a.id}`}
-          position={orphanPositions[i] ?? [0, 0, 0]}
-          name={a.name}
-          color="#5fc7bc"
-          onClick={() => onArticleClick(a.id)}
-          onHover={(h) => onArticleHover(h ? a.id : null)}
-        />
-      ))}
+      {scene.orphanArticles.map((a, i) => {
+        const pos = orphanPositions[i] ?? [0, 0, 0] as [number, number, number];
+        return (
+          <Fragment key={`orph-${a.id}`}>
+            <ArticleStar
+              position={pos}
+              name={a.name}
+              color="#5fc7bc"
+              onClick={() => onArticleClick(a.id)}
+              onHover={(h) => onArticleHover(h ? a.id : null)}
+            />
+            {hoveredArticleId === a.id && (
+              <Tooltip position={pos} title={a.name} />
+            )}
+          </Fragment>
+        );
+      })}
     </Canvas>
   );
 }
